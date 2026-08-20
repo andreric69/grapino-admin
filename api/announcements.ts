@@ -14,20 +14,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       const { data, error } = await supabase
         .from('announcements')
-        .select('id, created_at, title, body, is_active')
+        .select('id, created_at, title, body, is_active, target_user_id, type, repeat_every_days')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      res.status(200).json({ announcements: data ?? [] });
+
+      const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 200 });
+      if (usersError) throw usersError;
+      const emailById = new Map(usersData.users.map((u) => [u.id, u.email ?? null]));
+
+      const announcements = (data ?? []).map((a) => ({
+        ...a,
+        target_email: a.target_user_id ? (emailById.get(a.target_user_id) ?? null) : null,
+      }));
+      res.status(200).json({ announcements });
       return;
     }
 
     if (req.method === 'POST') {
-      const { title, body } = (req.body ?? {}) as { title?: string; body?: string };
+      const { title, body, targetUserId, type, repeatEveryDays } = (req.body ?? {}) as {
+        title?: string;
+        body?: string;
+        targetUserId?: string | null;
+        type?: 'news' | 'update';
+        repeatEveryDays?: number | null;
+      };
       if (!title?.trim() || !body?.trim()) {
         res.status(400).json({ error: 'title und body erforderlich.' });
         return;
       }
-      const { error } = await supabase.from('announcements').insert({ title: title.trim(), body: body.trim() });
+      const { error } = await supabase.from('announcements').insert({
+        title: title.trim(),
+        body: body.trim(),
+        target_user_id: targetUserId || null,
+        type: type === 'update' ? 'update' : 'news',
+        repeat_every_days: repeatEveryDays && repeatEveryDays > 0 ? repeatEveryDays : null,
+      });
       if (error) throw error;
       res.status(200).json({ ok: true });
       return;

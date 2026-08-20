@@ -7,6 +7,10 @@ interface Announcement {
   title: string;
   body: string;
   isActive: boolean;
+  targetUserId: string | null;
+  targetEmail: string | null;
+  type: 'news' | 'update';
+  repeatEveryDays: number | null;
 }
 
 interface AnnouncementRow {
@@ -15,24 +19,38 @@ interface AnnouncementRow {
   title: string;
   body: string;
   is_active: boolean;
+  target_user_id: string | null;
+  target_email: string | null;
+  type: 'news' | 'update';
+  repeat_every_days: number | null;
+}
+
+interface UserOption {
+  id: string;
+  email: string | null;
 }
 
 export function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[] | null>(null);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [error, setError] = useState<string | null>(null);
+
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [targetUserId, setTargetUserId] = useState('');
+  const [type, setType] = useState<'news' | 'update'>('news');
+  const [repeatEveryDays, setRepeatEveryDays] = useState('');
   const [sending, setSending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
     setError(null);
-    const res = await apiFetch('/api/announcements');
-    if (!res.ok) {
+    const [annRes, usersRes] = await Promise.all([apiFetch('/api/announcements'), apiFetch('/api/users')]);
+    if (!annRes.ok) {
       setError('Ankuendigungen konnten nicht geladen werden.');
       return;
     }
-    const data = (await res.json()) as { announcements: AnnouncementRow[] };
+    const data = (await annRes.json()) as { announcements: AnnouncementRow[] };
     setAnnouncements(
       data.announcements.map((a) => ({
         id: a.id,
@@ -40,8 +58,16 @@ export function AnnouncementsPage() {
         title: a.title,
         body: a.body,
         isActive: a.is_active,
+        targetUserId: a.target_user_id,
+        targetEmail: a.target_email,
+        type: a.type,
+        repeatEveryDays: a.repeat_every_days,
       })),
     );
+    if (usersRes.ok) {
+      const usersData = (await usersRes.json()) as { users: { id: string; email: string | null }[] };
+      setUsers(usersData.users);
+    }
   }
 
   useEffect(() => {
@@ -53,14 +79,24 @@ export function AnnouncementsPage() {
     setSending(true);
     setError(null);
     try {
+      const days = parseInt(repeatEveryDays, 10);
       const res = await apiFetch('/api/announcements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, body }),
+        body: JSON.stringify({
+          title,
+          body,
+          targetUserId: targetUserId || null,
+          type,
+          repeatEveryDays: Number.isFinite(days) && days > 0 ? days : null,
+        }),
       });
       if (!res.ok) throw new Error();
       setTitle('');
       setBody('');
+      setTargetUserId('');
+      setType('news');
+      setRepeatEveryDays('');
       await load();
     } catch {
       setError('Ankuendigung konnte nicht erstellt werden.');
@@ -121,6 +157,37 @@ export function AnnouncementsPage() {
           rows={3}
           style={{ padding: '6px 8px', fontSize: 14, fontFamily: 'inherit', resize: 'vertical' }}
         />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            Zielgruppe
+            <select value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} style={{ padding: '5px 6px' }}>
+              <option value="">Alle Nutzer</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.email ?? u.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            Typ
+            <select value={type} onChange={(e) => setType(e.target.value as 'news' | 'update')} style={{ padding: '5px 6px' }}>
+              <option value="news">Ankuendigung</option>
+              <option value="update">Update</option>
+            </select>
+          </label>
+          <label style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            Wiederholen alle (Tage)
+            <input
+              type="number"
+              min={1}
+              placeholder="leer = einmalig"
+              value={repeatEveryDays}
+              onChange={(e) => setRepeatEveryDays(e.target.value)}
+              style={{ padding: '5px 6px', width: 130 }}
+            />
+          </label>
+        </div>
         <button
           type="button"
           disabled={sending || !title.trim() || !body.trim()}
@@ -139,10 +206,16 @@ export function AnnouncementsPage() {
         {announcements?.map((a) => (
           <div key={a.id} style={{ border: '1px solid #ccc', borderRadius: 6, padding: 12, fontSize: 14, opacity: a.isActive ? 1 : 0.5 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <strong>{a.title}</strong>
+              <strong>
+                {a.type === 'update' ? '🔄' : '📢'} {a.title}
+              </strong>
               <span style={{ fontSize: 12, opacity: 0.6 }}>{new Date(a.createdAt).toLocaleString('de-CH')}</span>
             </div>
             <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>{a.body}</div>
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+              An: {a.targetEmail ?? 'Alle Nutzer'} · {a.repeatEveryDays ? `wiederholt alle ${a.repeatEveryDays} Tage` : 'einmalig'} ·{' '}
+              {a.isActive ? 'aktiv' : 'deaktiviert'}
+            </div>
             <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
               <button type="button" disabled={busyId === a.id} onClick={() => toggleActive(a)} style={{ cursor: 'pointer' }}>
                 {a.isActive ? 'Deaktivieren' : 'Aktivieren'}
