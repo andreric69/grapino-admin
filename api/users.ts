@@ -57,14 +57,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      const { userId, action } = (req.body ?? {}) as { userId?: string; action?: 'ban' | 'unban' };
-      if (!userId || (action !== 'ban' && action !== 'unban')) {
-        res.status(400).json({ error: 'userId und action ("ban"|"unban") erforderlich.' });
+      const body = (req.body ?? {}) as {
+        userId?: string;
+        action?: 'ban' | 'unban' | 'create';
+        email?: string;
+        password?: string;
+      };
+      const supabase = getSupabaseAdmin();
+
+      if (body.action === 'create') {
+        const email = body.email?.trim();
+        const password = body.password;
+        if (!email || !password || password.length < 8) {
+          res.status(400).json({ error: 'E-Mail und Passwort (mind. 8 Zeichen) erforderlich.' });
+          return;
+        }
+        const { error } = await supabase.auth.admin.createUser({ email, password, email_confirm: true });
+        if (error) throw error;
+        res.status(200).json({ ok: true });
         return;
       }
-      const supabase = getSupabaseAdmin();
-      const { error } = await supabase.auth.admin.updateUserById(userId, {
-        ban_duration: action === 'ban' ? BAN_DURATION : 'none',
+
+      if (!body.userId || (body.action !== 'ban' && body.action !== 'unban')) {
+        res.status(400).json({ error: 'userId und action ("ban"|"unban"|"create") erforderlich.' });
+        return;
+      }
+      const { error } = await supabase.auth.admin.updateUserById(body.userId, {
+        ban_duration: body.action === 'ban' ? BAN_DURATION : 'none',
       });
       if (error) throw error;
       res.status(200).json({ ok: true });

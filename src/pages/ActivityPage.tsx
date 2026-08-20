@@ -1,0 +1,56 @@
+import { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/apiClient';
+
+interface ActivityEntry {
+  at: string;
+  type: 'wine_added' | 'wine_consumed' | 'deletion_requested' | 'feedback';
+  email: string | null;
+  detail: string;
+}
+
+const TYPE_ICON: Record<ActivityEntry['type'], string> = {
+  wine_added: '🍷',
+  wine_consumed: '🥂',
+  deletion_requested: '🗑️',
+  feedback: '💬',
+};
+
+export function ActivityPage() {
+  const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch('/api/activity').then(async (res) => {
+      if (!res.ok) {
+        setError('Aktivitaet konnte nicht geladen werden.');
+        return;
+      }
+      const data = (await res.json()) as { entries: ActivityEntry[] };
+      setEntries(data.entries);
+    });
+  }, []);
+
+  if (error) return <p style={{ color: '#b3261e' }}>{error}</p>;
+  if (!entries) return <p>Wird geladen ...</p>;
+  if (entries.length === 0) return <p style={{ opacity: 0.7 }}>Noch keine Aktivitaet.</p>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <p style={{ fontSize: 12, opacity: 0.6, marginTop: 0 }}>
+        Zeigt Wein-Eintraege, Trinkverlauf, Loeschanfragen und Feedback. Login-Historie wird nicht gespeichert -
+        nur der letzte Login ist unter "Nutzer" sichtbar.
+      </p>
+      {entries.map((e, i) => (
+        <div
+          key={i}
+          style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13.5, borderBottom: '1px solid #eee', padding: '6px 0' }}
+        >
+          <span>{TYPE_ICON[e.type]}</span>
+          <span style={{ opacity: 0.6, whiteSpace: 'nowrap' }}>{new Date(e.at).toLocaleString('de-CH')}</span>
+          <span style={{ fontWeight: 600 }}>{e.email ?? 'Unbekannt'}</span>
+          <span>{e.detail}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
