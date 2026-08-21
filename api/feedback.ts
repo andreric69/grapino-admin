@@ -108,6 +108,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    if (req.method === 'DELETE') {
+      const { feedbackId } = (req.body ?? {}) as { feedbackId?: string };
+      if (!feedbackId) {
+        res.status(400).json({ error: 'feedbackId erforderlich.' });
+        return;
+      }
+      // Antwort (falls vorhanden) zuerst loeschen - kein Cascade auf app_feedback definiert.
+      const { error: replyError } = await supabase.from('feedback_replies').delete().eq('feedback_id', feedbackId);
+      if (replyError) throw replyError;
+      const { error } = await supabase.from('app_feedback').delete().eq('id', feedbackId);
+      if (error) throw error;
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     res.status(405).json({ error: 'Method not allowed' });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });

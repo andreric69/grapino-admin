@@ -19,6 +19,7 @@ export function FeedbackPage() {
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function load() {
     setError(null);
@@ -54,6 +55,24 @@ export function FeedbackPage() {
     }
   }
 
+  async function handleDelete(f: FeedbackRow) {
+    if (!window.confirm(`Feedback von ${f.email ?? 'Unbekannt'} unwiderruflich loeschen?`)) return;
+    setDeletingId(f.id);
+    try {
+      const res = await apiFetch('/api/feedback', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedbackId: f.id }),
+      });
+      if (!res.ok) throw new Error();
+      await load();
+    } catch {
+      setError('Loeschen fehlgeschlagen.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!feedback) return <LoadingSpinner label="Wird geladen ..." />;
   if (feedback.length === 0) return <EmptyState icon="⭐" text="Noch kein Feedback." />;
@@ -64,7 +83,17 @@ export function FeedbackPage() {
         <div key={f.id} style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <strong>{f.email ?? 'Unbekannt'}</strong>
-            <span style={{ fontSize: 12, opacity: 0.6 }}>{new Date(f.createdAt).toLocaleString('de-CH')}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12, opacity: 0.6 }}>{new Date(f.createdAt).toLocaleString('de-CH')}</span>
+              <button
+                type="button"
+                disabled={deletingId === f.id}
+                onClick={() => handleDelete(f)}
+                style={{ cursor: 'pointer', color: colors.danger, fontSize: 12.5, border: 'none', background: 'none' }}
+              >
+                Loeschen
+              </button>
+            </div>
           </div>
           <div style={{ marginTop: 4, color: colors.accent }}>
             {'★'.repeat(f.rating)}

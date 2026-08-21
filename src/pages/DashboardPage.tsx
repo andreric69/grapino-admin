@@ -6,13 +6,12 @@ import { DeletionRequestsPage } from './DeletionRequestsPage';
 import { AnnouncementsPage } from './AnnouncementsPage';
 import { FeedbackPage } from './FeedbackPage';
 import { ActivityPage } from './ActivityPage';
-import { CostsPage } from './CostsPage';
 import { MessagesPage } from './MessagesPage';
 import { PaymentRequestsPage } from './PaymentRequestsPage';
 import { OrdersPage } from './OrdersPage';
 import { StoragePage } from './StoragePage';
 import { EmailTemplatesPage } from './EmailTemplatesPage';
-import { PricingPage } from './PricingPage';
+import { PricingAndCostsPage } from './PricingAndCostsPage';
 import { OverviewPage } from './OverviewPage';
 
 type Tab =
@@ -22,13 +21,12 @@ type Tab =
   | 'messages'
   | 'payments'
   | 'orders'
-  | 'pricing'
+  | 'pricingCosts'
   | 'announcements'
   | 'feedback'
   | 'email'
   | 'activity'
-  | 'storage'
-  | 'costs';
+  | 'storage';
 
 const NAV: { key: Tab; label: string; icon: string }[] = [
   { key: 'overview', label: 'Uebersicht', icon: '\u{1F4CA}' },
@@ -37,13 +35,12 @@ const NAV: { key: Tab; label: string; icon: string }[] = [
   { key: 'messages', label: 'Nachrichten', icon: '\u{1F4AC}' },
   { key: 'payments', label: 'Zahlungen', icon: '\u{1F4B0}' },
   { key: 'orders', label: 'Auftraege', icon: '\u{1F4CB}' },
-  { key: 'pricing', label: 'Preise', icon: '\u{1F3F7}\u{FE0F}' },
+  { key: 'pricingCosts', label: 'Preise & Kosten', icon: '\u{1F4B8}' },
   { key: 'announcements', label: 'Ankuendigungen', icon: '\u{1F4E3}' },
   { key: 'feedback', label: 'Feedback', icon: '\u{2B50}' },
   { key: 'email', label: 'E-Mail-Vorlagen', icon: '\u{2709}\u{FE0F}' },
   { key: 'activity', label: 'Aktivitaet', icon: '\u{1F4C8}' },
   { key: 'storage', label: 'Speicher', icon: '\u{1F5C3}\u{FE0F}' },
-  { key: 'costs', label: 'Kosten', icon: '\u{1F4B8}' },
 ];
 
 const MOBILE_BREAKPOINT = '(max-width: 768px)';
@@ -210,13 +207,12 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === 'messages' && <MessagesPage />}
           {tab === 'payments' && <PaymentRequestsPage />}
           {tab === 'orders' && <OrdersPage />}
-          {tab === 'pricing' && <PricingPage />}
+          {tab === 'pricingCosts' && <PricingAndCostsPage />}
           {tab === 'announcements' && <AnnouncementsPage />}
           {tab === 'feedback' && <FeedbackPage />}
           {tab === 'email' && <EmailTemplatesPage />}
           {tab === 'activity' && <ActivityPage />}
           {tab === 'storage' && <StoragePage />}
-          {tab === 'costs' && <CostsPage />}
         </div>
       </div>
     </div>
