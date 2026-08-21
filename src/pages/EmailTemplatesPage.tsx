@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
-import { cardStyle, colors, inputStyle, primaryBtnStyle } from '../theme';
+import { cardStyle, inputStyle, primaryBtnStyle, secondaryBtnStyle } from '../theme';
 
 interface UserOption {
   id: string;
@@ -26,7 +26,7 @@ const TEMPLATES: Template[] = [
       `1. App auf dem Homescreen installieren: in Safari auf "Teilen" -> "Zum Home-Bildschirm" tippen.\n` +
       `2. Wein hinzufuegen: unten rechts auf das Plus tippen, Etikett fotografieren - Name/Jahrgang werden automatisch vorgeschlagen.\n` +
       `3. In den Einstellungen kannst du deinen Namen hinterlegen und die Sammlung sichern.\n\n` +
-      `Bei Fragen einfach ueber die Chat-Blase oben links melden.\n\nAndrin`,
+      `Bei Fragen einfach ueber die Chat-Blase unten links melden.\n\nAndrin`,
   },
   {
     key: 'vivino',
@@ -51,14 +51,16 @@ const TEMPLATES: Template[] = [
   },
 ];
 
+// Kein eigener E-Mail-Versand (kein Resend/Dienst noetig) - Text wird nur
+// vorbereitet, kopiert oder ans eigene Mail-Programm uebergeben. Versendet
+// wird von Andrin selbst aus seinem eigenen Postfach.
 export function EmailTemplatesPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [targetUserId, setTargetUserId] = useState('');
   const [templateKey, setTemplateKey] = useState(TEMPLATES[0].key);
   const [subject, setSubject] = useState(TEMPLATES[0].subject);
   const [body, setBody] = useState('');
-  const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     apiFetch('/api/users').then(async (res) => {
@@ -76,27 +78,19 @@ export function EmailTemplatesPage() {
     setTemplateKey(key);
     setSubject(template.subject);
     setBody(template.body(name));
+    setCopied(false);
   }
 
-  async function handleSend() {
-    if (!targetUserId || !subject.trim() || !body.trim()) return;
-    setSending(true);
-    setResult(null);
-    try {
-      const res = await apiFetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: targetUserId, subject, body }),
-      });
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) throw new Error(data?.error ?? 'Versand fehlgeschlagen.');
-      setResult({ ok: true, message: 'Gesendet.' });
-    } catch (e) {
-      setResult({ ok: false, message: e instanceof Error ? e.message : 'Versand fehlgeschlagen.' });
-    } finally {
-      setSending(false);
-    }
+  const targetEmail = users.find((u) => u.id === targetUserId)?.email ?? '';
+
+  async function handleCopy() {
+    const text = `An: ${targetEmail}\nBetreff: ${subject}\n\n${body}`;
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
+
+  const mailtoHref = `mailto:${encodeURIComponent(targetEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -138,18 +132,20 @@ export function EmailTemplatesPage() {
           style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
         />
 
-        <button
-          type="button"
-          disabled={sending || !targetUserId || !subject.trim() || !body.trim()}
-          onClick={handleSend}
-          style={{ ...primaryBtnStyle, alignSelf: 'flex-start' }}
-        >
-          {sending ? 'Wird gesendet ...' : 'Senden'}
-        </button>
-        {result && <div style={{ fontSize: 13, color: result.ok ? colors.success : colors.danger }}>{result.message}</div>}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" disabled={!subject.trim() || !body.trim()} onClick={handleCopy} style={primaryBtnStyle}>
+            {copied ? 'Kopiert!' : 'Text kopieren'}
+          </button>
+          <a
+            href={mailtoHref}
+            style={{ ...secondaryBtnStyle, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+          >
+            In Mail-App oeffnen
+          </a>
+        </div>
         <div style={{ fontSize: 11.5, opacity: 0.55 }}>
-          Braucht RESEND_API_KEY/RESEND_FROM_ADDRESS in den Umgebungsvariablen. Ohne verifizierte Domain bei Resend
-          kann nur an die eigene, bei Resend registrierte Adresse gesendet werden.
+          Kein automatischer Versand - Text kopieren und selbst versenden, oder direkt im eigenen Mail-Programm
+          oeffnen (Empfaenger/Betreff/Text sind schon ausgefuellt).
         </div>
       </div>
     </div>
