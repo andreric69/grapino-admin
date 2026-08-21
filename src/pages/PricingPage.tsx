@@ -1,0 +1,111 @@
+import { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/apiClient';
+import { cardStyle, colors, inputStyle, primaryBtnStyle } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+
+interface PricingConfig {
+  trinkfenster_price: number;
+  name_price: number;
+  refresh_price: number;
+  neue_weine_price: number;
+  ultra_price: number;
+  minimum_price: number;
+  updated_at: string;
+}
+
+const FIELDS: { key: keyof Omit<PricingConfig, 'updated_at'>; label: string; hint: string }[] = [
+  { key: 'trinkfenster_price', label: 'Nur Trinkfenster (CHF/Wein)', hint: '' },
+  { key: 'name_price', label: 'Nur Name (CHF/Wein)', hint: '' },
+  { key: 'refresh_price', label: 'Refresh - alles aktualisieren (CHF/Wein)', hint: '' },
+  { key: 'neue_weine_price', label: 'Fuer neue Weine (CHF/Wein)', hint: '' },
+  { key: 'ultra_price', label: 'Ultra Import Paket (CHF/Wein)', hint: '' },
+  { key: 'minimum_price', label: 'Mindestbetrag pro Auftrag (CHF)', hint: 'Gilt fuer jede Kategorie, unabhaengig von der Flaschenzahl.' },
+];
+
+/**
+ * Alle Preise wirken in der Weinapp progressiv (Quadratwurzel der
+ * Flaschenzahl statt linear) - der hier eingestellte Wert ist jeweils der
+ * Basis-Preis bei 1 Flasche, siehe estimateOrderPrice() in der Weinapp.
+ */
+export function PricingPage() {
+  const [pricing, setPricing] = useState<PricingConfig | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function load() {
+    setError(null);
+    const res = await apiFetch('/api/commerce?resource=pricing');
+    if (!res.ok) {
+      setError('Preise konnten nicht geladen werden.');
+      return;
+    }
+    const data = (await res.json()) as { pricing: PricingConfig };
+    setPricing(data.pricing);
+    setDraft(Object.fromEntries(FIELDS.map((f) => [f.key, String(data.pricing[f.key])])));
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaved(false);
+    setError(null);
+    try {
+      const body: Record<string, number> = {};
+      for (const f of FIELDS) {
+        const parsed = parseFloat(draft[f.key]?.replace(',', '.') ?? '');
+        if (Number.isNaN(parsed) || parsed < 0) {
+          throw new Error(`${f.label}: ungueltiger Wert.`);
+        }
+        body[f.key] = parsed;
+      }
+      const res = await apiFetch('/api/commerce?resource=pricing', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('Speichern fehlgeschlagen.');
+      setSaved(true);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (error && !pricing) return <p style={{ color: colors.danger }}>{error}</p>;
+  if (!pricing) return <LoadingSpinner label="Wird geladen ..." />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 480 }}>
+      <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {FIELDS.map((f) => (
+          <div key={f.key}>
+            <label style={{ display: 'block', fontSize: 12.5, opacity: 0.7, marginBottom: 4 }}>{f.label}</label>
+            <input
+              value={draft[f.key] ?? ''}
+              onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+              style={{ ...inputStyle, width: '100%' }}
+            />
+            {f.hint && <div style={{ fontSize: 11, opacity: 0.55, marginTop: 2 }}>{f.hint}</div>}
+          </div>
+        ))}
+        <button type="button" disabled={saving} onClick={handleSave} style={{ ...primaryBtnStyle, alignSelf: 'flex-start' }}>
+          {saving ? 'Wird gespeichert ...' : 'Preise speichern'}
+        </button>
+        {saved && <p style={{ color: colors.success, margin: 0, fontSize: 13 }}>Gespeichert.</p>}
+        {error && <p style={{ color: colors.danger, margin: 0, fontSize: 13 }}>{error}</p>}
+      </div>
+      <p style={{ fontSize: 12, opacity: 0.6 }}>
+        Die Weinapp rechnet damit progressiv (Quadratwurzel der Flaschenzahl statt linear) - der Preis oben gilt fuer 1
+        Flasche, bei grossen Mengen wird es automatisch guenstiger pro Flasche. Aenderungen wirken sofort fuer alle
+        neuen Auftraege.
+      </p>
+    </div>
+  );
+}

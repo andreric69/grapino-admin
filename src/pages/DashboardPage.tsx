@@ -12,13 +12,17 @@ import { PaymentRequestsPage } from './PaymentRequestsPage';
 import { OrdersPage } from './OrdersPage';
 import { StoragePage } from './StoragePage';
 import { EmailTemplatesPage } from './EmailTemplatesPage';
+import { PricingPage } from './PricingPage';
+import { OverviewPage } from './OverviewPage';
 
 type Tab =
+  | 'overview'
   | 'users'
   | 'deletions'
   | 'messages'
   | 'payments'
   | 'orders'
+  | 'pricing'
   | 'announcements'
   | 'feedback'
   | 'email'
@@ -27,11 +31,13 @@ type Tab =
   | 'costs';
 
 const NAV: { key: Tab; label: string; icon: string }[] = [
+  { key: 'overview', label: 'Uebersicht', icon: '\u{1F4CA}' },
   { key: 'users', label: 'Nutzer', icon: '\u{1F464}' },
   { key: 'deletions', label: 'Loeschanfragen', icon: '\u{1F5D1}\u{FE0F}' },
   { key: 'messages', label: 'Nachrichten', icon: '\u{1F4AC}' },
   { key: 'payments', label: 'Zahlungen', icon: '\u{1F4B0}' },
   { key: 'orders', label: 'Auftraege', icon: '\u{1F4CB}' },
+  { key: 'pricing', label: 'Preise', icon: '\u{1F3F7}\u{FE0F}' },
   { key: 'announcements', label: 'Ankuendigungen', icon: '\u{1F4E3}' },
   { key: 'feedback', label: 'Feedback', icon: '\u{2B50}' },
   { key: 'email', label: 'E-Mail-Vorlagen', icon: '\u{2709}\u{FE0F}' },
@@ -56,7 +62,7 @@ function useIsMobile(): boolean {
 }
 
 export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
-  const [tab, setTab] = useState<Tab>('users');
+  const [tab, setTab] = useState<Tab>('overview');
   const isMobile = useIsMobile();
   const [navOpen, setNavOpen] = useState(false);
 
@@ -198,11 +204,13 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
               {NAV.find((n) => n.key === tab)?.label}
             </h1>
           )}
+          {tab === 'overview' && <OverviewPage />}
           {tab === 'deletions' && <DeletionRequestsPage />}
           {tab === 'users' && <UsersPage />}
           {tab === 'messages' && <MessagesPage />}
           {tab === 'payments' && <PaymentRequestsPage />}
           {tab === 'orders' && <OrdersPage />}
+          {tab === 'pricing' && <PricingPage />}
           {tab === 'announcements' && <AnnouncementsPage />}
           {tab === 'feedback' && <FeedbackPage />}
           {tab === 'email' && <EmailTemplatesPage />}

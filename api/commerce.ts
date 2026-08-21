@@ -3,8 +3,12 @@ import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// Auftraege und Zahlungsanfragen zusammen in einer Datei - wegen Vercels
-// 12-Funktionen-Limit auf dem Hobby-Plan, ausgewaehlt via ?resource=orders|payments.
+// Auftraege, Zahlungsanfragen und Preise zusammen in einer Datei - wegen
+// Vercels 12-Funktionen-Limit auf dem Hobby-Plan, ausgewaehlt via
+// ?resource=orders|payments|pricing.
+
+const PRICING_FIELDS =
+  'trinkfenster_price, name_price, refresh_price, neue_weine_price, ultra_price, minimum_price, updated_at';
 
 const CATEGORY_LABELS: Record<string, string> = {
   trinkfenster: 'Nur Trinkfenster',
@@ -149,7 +153,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    res.status(400).json({ error: 'resource ("orders"|"payments") erforderlich.' });
+    if (resource === 'pricing') {
+      if (req.method === 'GET') {
+        const { data, error } = await supabase.from('pricing_config').select(PRICING_FIELDS).eq('id', 1).single();
+        if (error) throw error;
+        res.status(200).json({ pricing: data });
+        return;
+      }
+      if (req.method === 'PATCH') {
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const allowedFields = [
+          'trinkfenster_price',
+          'name_price',
+          'refresh_price',
+          'neue_weine_price',
+          'ultra_price',
+          'minimum_price',
+        ];
+        const update: Record<string, number> = {};
+        for (const field of allowedFields) {
+          const value = body[field];
+          if (typeof value === 'number' && !Number.isNaN(value) && value >= 0) update[field] = value;
+        }
+        if (Object.keys(update).length === 0) {
+          res.status(400).json({ error: 'Mindestens ein gueltiges Preisfeld erforderlich.' });
+          return;
+        }
+        const { error } = await supabase
+          .from('pricing_config')
+          .update({ ...update, updated_at: new Date().toISOString() })
+          .eq('id', 1);
+        if (error) throw error;
+        res.status(200).json({ ok: true });
+        return;
+      }
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    res.status(400).json({ error: 'resource ("orders"|"payments"|"pricing") erforderlich.' });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
   }

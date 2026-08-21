@@ -143,18 +143,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (resource === 'costs') {
       if (req.method === 'GET') {
-        const { data, error } = await supabase.from('admin_costs').select('id, created_at, label, amount, note').order('created_at', { ascending: false });
+        const { data, error } = await supabase
+          .from('admin_costs')
+          .select('id, created_at, label, amount, note, recurrence')
+          .order('created_at', { ascending: false });
         if (error) throw error;
         res.status(200).json({ costs: data ?? [] });
         return;
       }
       if (req.method === 'POST') {
-        const { label, amount, note } = (req.body ?? {}) as { label?: string; amount?: number; note?: string };
+        const { label, amount, note, recurrence } = (req.body ?? {}) as {
+          label?: string;
+          amount?: number;
+          note?: string;
+          recurrence?: 'einmalig' | 'monatlich';
+        };
         if (!label?.trim() || typeof amount !== 'number' || Number.isNaN(amount)) {
           res.status(400).json({ error: 'label und amount erforderlich.' });
           return;
         }
-        const { error } = await supabase.from('admin_costs').insert({ label: label.trim(), amount, note: note?.trim() || null });
+        const { error } = await supabase.from('admin_costs').insert({
+          label: label.trim(),
+          amount,
+          note: note?.trim() || null,
+          recurrence: recurrence === 'monatlich' ? 'monatlich' : 'einmalig',
+        });
+        if (error) throw error;
+        res.status(200).json({ ok: true });
+        return;
+      }
+      if (req.method === 'PATCH') {
+        const { id, label, amount, note, recurrence } = (req.body ?? {}) as {
+          id?: string;
+          label?: string;
+          amount?: number;
+          note?: string;
+          recurrence?: 'einmalig' | 'monatlich';
+        };
+        if (!id) {
+          res.status(400).json({ error: 'id erforderlich.' });
+          return;
+        }
+        const update: Record<string, unknown> = {};
+        if (label?.trim()) update.label = label.trim();
+        if (typeof amount === 'number' && !Number.isNaN(amount)) update.amount = amount;
+        if (note !== undefined) update.note = note?.trim() || null;
+        if (recurrence === 'einmalig' || recurrence === 'monatlich') update.recurrence = recurrence;
+        if (Object.keys(update).length === 0) {
+          res.status(400).json({ error: 'Keine Aenderung angegeben.' });
+          return;
+        }
+        const { error } = await supabase.from('admin_costs').update(update).eq('id', id);
         if (error) throw error;
         res.status(200).json({ ok: true });
         return;

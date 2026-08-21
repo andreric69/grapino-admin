@@ -12,6 +12,8 @@ interface AdminUser {
   lastSignInAt: string | null;
   bannedUntil: string | null;
   wineCount: number;
+  isBlocked: boolean;
+  trialEndsAt: string | null;
 }
 
 function formatDateTime(iso: string | null): string {
@@ -181,7 +183,17 @@ export function UsersPage() {
                 </td>
                 <td style={{ padding: '6px 8px' }}>{formatDateTime(u.lastSignInAt)}</td>
                 <td style={{ padding: '6px 8px' }}>{u.wineCount}</td>
-                <td style={{ padding: '6px 8px' }}>{u.bannedUntil ? 'Deaktiviert' : 'Aktiv'}</td>
+                <td style={{ padding: '6px 8px' }}>
+                  {u.bannedUntil ? 'Deaktiviert' : 'Aktiv'}
+                  {u.isBlocked && (
+                    <span style={{ marginLeft: 6, fontSize: 11, padding: '2px 7px', borderRadius: 10, background: colors.danger, color: '#fff' }}>
+                      Blockiert
+                    </span>
+                  )}
+                  {u.trialEndsAt && (
+                    <div style={{ fontSize: 11, opacity: 0.55 }}>Testabo bis {u.trialEndsAt}</div>
+                  )}
+                </td>
                 <td style={{ padding: '6px 8px' }}>
                   <button type="button" onClick={() => setExpandedUserId(expandedUserId === u.id ? null : u.id)} style={secondaryBtnStyle}>
                     {expandedUserId === u.id ? 'Details ausblenden' : 'Details'}

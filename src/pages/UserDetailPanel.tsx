@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
-import { colors, inputStyle, secondaryBtnStyle } from '../theme';
+import { cardStyle, colors, inputStyle, secondaryBtnStyle } from '../theme';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 interface UserDetail {
@@ -12,6 +12,7 @@ interface UserDetail {
     lastSignInAt: string | null;
     bannedUntil: string | null;
   };
+  access: { isBlocked: boolean; blockReason: string | null; blockAmount: number | null; trialEndsAt: string | null };
   wineStats: { total: number; active: number; totalValue: number; withPrice: number };
   announcements: { id: string; created_at: string; title: string; type: string; target_user_id: string | null; seenAt: string | null }[];
   feedback: { id: string; created_at: string; rating: number }[];
@@ -32,6 +33,11 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
+  const [blockReason, setBlockReason] = useState('');
+  const [blockAmount, setBlockAmount] = useState('');
+  const [trialEndsAt, setTrialEndsAt] = useState('');
+  const [savingAccess, setSavingAccess] = useState(false);
+
   async function load() {
     setError(null);
     const res = await apiFetch(`/api/users?userId=${encodeURIComponent(userId)}`);
@@ -39,13 +45,42 @@ export function UserDetailPanel({ userId }: { userId: string }) {
       setError('Details konnten nicht geladen werden.');
       return;
     }
-    setDetail((await res.json()) as UserDetail);
+    const data = (await res.json()) as UserDetail;
+    setDetail(data);
+    setBlockReason(data.access.blockReason ?? '');
+    setBlockAmount(data.access.blockAmount !== null ? String(data.access.blockAmount) : '');
+    setTrialEndsAt(data.access.trialEndsAt ?? '');
   }
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  async function saveAccess(isBlocked: boolean) {
+    setSavingAccess(true);
+    setError(null);
+    try {
+      const res = await apiFetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'setAccess',
+          userId,
+          isBlocked,
+          blockReason: blockReason.trim() || null,
+          blockAmount: blockAmount.trim() ? parseFloat(blockAmount.replace(',', '.')) : null,
+          trialEndsAt: trialEndsAt || null,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      await load();
+    } catch {
+      setError('Zugangsstatus konnte nicht gespeichert werden.');
+    } finally {
+      setSavingAccess(false);
+    }
+  }
 
   async function addNote() {
     if (!noteText.trim()) return;
@@ -89,6 +124,65 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         <div>
           <div style={{ opacity: 0.55, fontSize: 11 }}>Wert (mit Preis: {detail.wineStats.withPrice})</div>
           <div>{detail.wineStats.totalValue.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div style={{ ...cardStyle, background: detail.access.isBlocked ? 'rgba(179, 38, 30, 0.06)' : colors.surface }}>
+        <div style={{ fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          Zugang
+          <span
+            style={{
+              fontSize: 11,
+              padding: '2px 8px',
+              borderRadius: 10,
+              background: detail.access.isBlocked ? colors.danger : colors.success,
+              color: '#fff',
+            }}
+          >
+            {detail.access.isBlocked ? 'Blockiert' : 'Frei'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          <input
+            value={blockReason}
+            onChange={(e) => setBlockReason(e.target.value)}
+            placeholder="Grund (z. B. Zugangsgebuehr offen)"
+            style={inputStyle}
+          />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              value={blockAmount}
+              onChange={(e) => setBlockAmount(e.target.value)}
+              placeholder="Betrag CHF"
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <input
+              type="date"
+              value={trialEndsAt}
+              onChange={(e) => setTrialEndsAt(e.target.value)}
+              title="Testabo-Ende (nur informativ, blockiert nichts automatisch)"
+              style={{ ...inputStyle, flex: 1 }}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {detail.access.isBlocked ? (
+            <button type="button" disabled={savingAccess} onClick={() => saveAccess(false)} style={secondaryBtnStyle}>
+              Freischalten
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={savingAccess || !blockReason.trim()}
+              onClick={() => saveAccess(true)}
+              style={{ ...secondaryBtnStyle, background: colors.danger, color: '#fff', border: 'none' }}
+            >
+              Blockieren
+            </button>
+          )}
+          <button type="button" disabled={savingAccess} onClick={() => saveAccess(detail.access.isBlocked)} style={secondaryBtnStyle}>
+            Nur Testabo-Datum speichern
+          </button>
         </div>
       </div>
 

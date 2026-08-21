@@ -16,31 +16,55 @@ interface AdminUserRow {
   lastSignInAt: string | null;
   bannedUntil: string | null;
   wineCount: number;
+  isBlocked: boolean;
+  blockReason: string | null;
+  blockAmount: number | null;
+  trialEndsAt: string | null;
+}
+
+interface UserAccessRow {
+  user_id: string;
+  is_blocked: boolean;
+  block_reason: string | null;
+  block_amount: number | null;
+  trial_ends_at: string | null;
 }
 
 async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminUserRow[]> {
   const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 200 });
   if (usersError) throw usersError;
 
-  const { data: wines, error: winesError } = await supabase.from('wines').select('user_id');
-  if (winesError) throw winesError;
+  const [winesRes, accessRes] = await Promise.all([
+    supabase.from('wines').select('user_id'),
+    supabase.from('user_access').select('user_id, is_blocked, block_reason, block_amount, trial_ends_at'),
+  ]);
+  if (winesRes.error) throw winesRes.error;
+  if (accessRes.error) throw accessRes.error;
 
   const wineCountByUser = new Map<string, number>();
-  for (const row of wines ?? []) {
+  for (const row of winesRes.data ?? []) {
     wineCountByUser.set(row.user_id, (wineCountByUser.get(row.user_id) ?? 0) + 1);
   }
+  const accessByUser = new Map<string, UserAccessRow>((accessRes.data ?? []).map((a) => [a.user_id, a as UserAccessRow]));
 
   return usersData.users
-    .map((u) => ({
-      id: u.id,
-      email: u.email ?? null,
-      displayName: (u.user_metadata?.display_name as string | undefined) ?? null,
-      createdAt: u.created_at,
-      lastSignInAt: u.last_sign_in_at ?? null,
-      // ban_duration liegt weit in der Zukunft, wenn aktiv gesperrt; sonst leer.
-      bannedUntil: u.banned_until && new Date(u.banned_until) > new Date() ? u.banned_until : null,
-      wineCount: wineCountByUser.get(u.id) ?? 0,
-    }))
+    .map((u) => {
+      const access = accessByUser.get(u.id);
+      return {
+        id: u.id,
+        email: u.email ?? null,
+        displayName: (u.user_metadata?.display_name as string | undefined) ?? null,
+        createdAt: u.created_at,
+        lastSignInAt: u.last_sign_in_at ?? null,
+        // ban_duration liegt weit in der Zukunft, wenn aktiv gesperrt; sonst leer.
+        bannedUntil: u.banned_until && new Date(u.banned_until) > new Date() ? u.banned_until : null,
+        wineCount: wineCountByUser.get(u.id) ?? 0,
+        isBlocked: access?.is_blocked ?? false,
+        blockReason: access?.block_reason ?? null,
+        blockAmount: access?.block_amount ?? null,
+        trialEndsAt: access?.trial_ends_at ?? null,
+      };
+    })
     .sort((a, b) => a.email?.localeCompare(b.email ?? '') ?? 0);
 }
 
@@ -49,7 +73,7 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
   if (userError) throw userError;
   const user = userData.user;
 
-  const [winesRes, announcementsRes, dismissalsRes, feedbackRes, deletionRes, paymentRes, ordersRes, notesRes] =
+  const [winesRes, announcementsRes, dismissalsRes, feedbackRes, deletionRes, paymentRes, ordersRes, notesRes, accessRes] =
     await Promise.all([
       supabase.from('wines').select('id, price, is_consumed, is_wishlist').eq('user_id', userId),
       supabase
@@ -75,8 +99,13 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
       supabase.from('admin_user_notes').select('id, created_at, note').eq('user_id', userId).order('created_at', { ascending: false }),
+      supabase
+        .from('user_access')
+        .select('is_blocked, block_reason, block_amount, trial_ends_at')
+        .eq('user_id', userId)
+        .maybeSingle(),
     ]);
-  for (const r of [winesRes, announcementsRes, dismissalsRes, feedbackRes, deletionRes, paymentRes, ordersRes, notesRes]) {
+  for (const r of [winesRes, announcementsRes, dismissalsRes, feedbackRes, deletionRes, paymentRes, ordersRes, notesRes, accessRes]) {
     if (r.error) throw r.error;
   }
 
@@ -97,6 +126,12 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
       createdAt: user.created_at,
       lastSignInAt: user.last_sign_in_at ?? null,
       bannedUntil: user.banned_until && new Date(user.banned_until) > new Date() ? user.banned_until : null,
+    },
+    access: {
+      isBlocked: accessRes.data?.is_blocked ?? false,
+      blockReason: accessRes.data?.block_reason ?? null,
+      blockAmount: accessRes.data?.block_amount ?? null,
+      trialEndsAt: accessRes.data?.trial_ends_at ?? null,
     },
     wineStats: {
       total: wines.length,
@@ -136,12 +171,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const body = (req.body ?? {}) as {
         userId?: string;
-        action?: 'ban' | 'unban' | 'create' | 'setDisplayName' | 'addNote';
+        action?: 'ban' | 'unban' | 'create' | 'setDisplayName' | 'addNote' | 'setAccess';
         email?: string;
         password?: string;
         displayName?: string;
         note?: string;
+        isBlocked?: boolean;
+        blockReason?: string | null;
+        blockAmount?: number | null;
+        trialEndsAt?: string | null;
       };
+
+      if (body.action === 'setAccess') {
+        if (!body.userId) {
+          res.status(400).json({ error: 'userId erforderlich.' });
+          return;
+        }
+        const { error } = await supabase.from('user_access').upsert(
+          {
+            user_id: body.userId,
+            is_blocked: !!body.isBlocked,
+            block_reason: body.blockReason?.trim() || null,
+            block_amount: typeof body.blockAmount === 'number' && !Number.isNaN(body.blockAmount) ? body.blockAmount : null,
+            trial_ends_at: body.trialEndsAt || null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' },
+        );
+        if (error) throw error;
+        res.status(200).json({ ok: true });
+        return;
+      }
 
       if (body.action === 'create') {
         const email = body.email?.trim();
