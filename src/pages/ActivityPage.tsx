@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
+import { colors } from '../theme';
 
 interface ActivityEntry {
   at: string;
@@ -30,7 +31,7 @@ export function ActivityPage() {
     });
   }, []);
 
-  if (error) return <p style={{ color: '#b3261e' }}>{error}</p>;
+  if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!entries) return <p>Wird geladen ...</p>;
   if (entries.length === 0) return <p style={{ opacity: 0.7 }}>Noch keine Aktivitaet.</p>;
 
@@ -43,7 +44,7 @@ export function ActivityPage() {
       {entries.map((e, i) => (
         <div
           key={i}
-          style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13.5, borderBottom: '1px solid #eee', padding: '6px 0' }}
+          style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13.5, borderBottom: `1px solid ${colors.border}`, padding: '6px 0' }}
         >
           <span>{TYPE_ICON[e.type]}</span>
           <span style={{ opacity: 0.6, whiteSpace: 'nowrap' }}>{new Date(e.at).toLocaleString('de-CH')}</span>

@@ -1,28 +1,21 @@
 import { Fragment, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
+import { cardStyle, colors, inputStyle, primaryBtnStyle, secondaryBtnStyle } from '../theme';
+import { UserDetailPanel } from './UserDetailPanel';
 
 interface AdminUser {
   id: string;
   email: string | null;
+  displayName: string | null;
   createdAt: string;
   lastSignInAt: string | null;
   bannedUntil: string | null;
   wineCount: number;
 }
 
-interface UserWine {
-  id: string;
-  name: string;
-  producer: string | null;
-  vintage: number | null;
-  quantity: number;
-  is_consumed: boolean;
-  is_wishlist: boolean;
-}
-
-function formatDate(iso: string | null): string {
+function formatDateTime(iso: string | null): string {
   if (!iso) return '-';
-  return new Date(iso).toLocaleDateString('de-CH', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return new Date(iso).toLocaleString('de-CH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 export function UsersPage() {
@@ -32,13 +25,12 @@ export function UsersPage() {
 
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [newDisplayName, setNewDisplayName] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
 
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
-  const [userWines, setUserWines] = useState<UserWine[] | null>(null);
-  const [wineLoadError, setWineLoadError] = useState<string | null>(null);
 
   const [openFeedbackRequestUserIds, setOpenFeedbackRequestUserIds] = useState<Set<string>>(new Set());
   const [requestingFeedbackFor, setRequestingFeedbackFor] = useState<string | null>(null);
@@ -101,7 +93,7 @@ export function UsersPage() {
       const res = await apiFetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', email, password: newPassword }),
+        body: JSON.stringify({ action: 'create', email, password: newPassword, displayName: newDisplayName }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -110,6 +102,7 @@ export function UsersPage() {
       setCreateSuccess(`Konto fuer ${email} angelegt. Passwort dem Nutzer selbst mitteilen: ${newPassword}`);
       setNewEmail('');
       setNewPassword('');
+      setNewDisplayName('');
       await load();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Anlegen fehlgeschlagen.');
@@ -136,67 +129,42 @@ export function UsersPage() {
     }
   }
 
-  async function toggleDetails(user: AdminUser) {
-    if (expandedUserId === user.id) {
-      setExpandedUserId(null);
-      return;
-    }
-    setExpandedUserId(user.id);
-    setUserWines(null);
-    setWineLoadError(null);
-    const res = await apiFetch(`/api/user-wines?userId=${encodeURIComponent(user.id)}`);
-    if (!res.ok) {
-      setWineLoadError('Weinliste konnte nicht geladen werden.');
-      return;
-    }
-    const body = (await res.json()) as { wines: UserWine[] };
-    setUserWines(body.wines);
-  }
-
-  if (error) return <p style={{ color: '#b3261e' }}>{error}</p>;
+  if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!users) return <p>Wird geladen ...</p>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ border: '1px solid #ccc', borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong style={{ fontSize: 14 }}>Neuen Nutzer anlegen</strong>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            placeholder="E-Mail"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            style={{ flex: 1, padding: '6px 8px', fontSize: 14 }}
-          />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input placeholder="E-Mail" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 140 }} />
+          <input placeholder="Name" value={newDisplayName} onChange={(e) => setNewDisplayName(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 100 }} />
           <input
             placeholder="Startpasswort (mind. 8 Zeichen)"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            style={{ flex: 1, padding: '6px 8px', fontSize: 14 }}
+            style={{ ...inputStyle, flex: 1, minWidth: 160 }}
           />
         </div>
-        <button
-          type="button"
-          disabled={creating}
-          onClick={handleCreateUser}
-          style={{ cursor: 'pointer', alignSelf: 'flex-start' }}
-        >
+        <button type="button" disabled={creating} onClick={handleCreateUser} style={{ ...primaryBtnStyle, alignSelf: 'flex-start' }}>
           {creating ? 'Wird angelegt ...' : 'Konto anlegen'}
         </button>
-        {createError && <p style={{ color: '#b3261e', margin: 0, fontSize: 13 }}>{createError}</p>}
-        {createSuccess && <p style={{ color: '#1e7d32', margin: 0, fontSize: 13 }}>{createSuccess}</p>}
+        {createError && <p style={{ color: colors.danger, margin: 0, fontSize: 13 }}>{createError}</p>}
+        {createSuccess && <p style={{ color: colors.success, margin: 0, fontSize: 13 }}>{createSuccess}</p>}
         <p style={{ fontSize: 12, opacity: 0.6, margin: 0 }}>
-          Kein E-Mail-Versand - das Passwort muss selbst an den Nutzer weitergegeben werden.
+          Kein E-Mail-Versand fuer das Passwort - selbst an den Nutzer weitergeben (E-Mail-Vorlagen koennen fuer den
+          Rest helfen).
         </p>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
         <thead>
-          <tr style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>
-            <th style={{ padding: '6px 8px' }}>E-Mail</th>
-            <th style={{ padding: '6px 8px' }}>Registriert</th>
-            <th style={{ padding: '6px 8px' }}>Letzte Aktivitaet</th>
+          <tr style={{ textAlign: 'left', borderBottom: `1px solid ${colors.border}` }}>
+            <th style={{ padding: '6px 8px' }}>Name / E-Mail</th>
+            <th style={{ padding: '6px 8px' }}>Letzter Login</th>
             <th style={{ padding: '6px 8px' }}>Weine</th>
             <th style={{ padding: '6px 8px' }}>Status</th>
+            <th style={{ padding: '6px 8px' }}></th>
             <th style={{ padding: '6px 8px' }}></th>
             <th style={{ padding: '6px 8px' }}></th>
           </tr>
@@ -204,18 +172,21 @@ export function UsersPage() {
         <tbody>
           {users.map((u) => (
             <Fragment key={u.id}>
-              <tr style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '6px 8px' }}>{u.email ?? u.id}</td>
-                <td style={{ padding: '6px 8px' }}>{formatDate(u.createdAt)}</td>
-                <td style={{ padding: '6px 8px' }}>{formatDate(u.lastSignInAt)}</td>
+              <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
                 <td style={{ padding: '6px 8px' }}>
-                  <button type="button" onClick={() => toggleDetails(u)} style={{ cursor: 'pointer' }}>
-                    {u.wineCount} {expandedUserId === u.id ? '▲' : '▼'}
-                  </button>
+                  {u.displayName && <div style={{ fontWeight: 600 }}>{u.displayName}</div>}
+                  <div style={{ opacity: u.displayName ? 0.6 : 1, fontSize: u.displayName ? 12 : 13.5 }}>{u.email ?? u.id}</div>
                 </td>
+                <td style={{ padding: '6px 8px' }}>{formatDateTime(u.lastSignInAt)}</td>
+                <td style={{ padding: '6px 8px' }}>{u.wineCount}</td>
                 <td style={{ padding: '6px 8px' }}>{u.bannedUntil ? 'Deaktiviert' : 'Aktiv'}</td>
                 <td style={{ padding: '6px 8px' }}>
-                  <button type="button" disabled={busyId === u.id} onClick={() => toggleBan(u)} style={{ cursor: 'pointer' }}>
+                  <button type="button" onClick={() => setExpandedUserId(expandedUserId === u.id ? null : u.id)} style={secondaryBtnStyle}>
+                    {expandedUserId === u.id ? 'Details ausblenden' : 'Details'}
+                  </button>
+                </td>
+                <td style={{ padding: '6px 8px' }}>
+                  <button type="button" disabled={busyId === u.id} onClick={() => toggleBan(u)} style={secondaryBtnStyle}>
                     {u.bannedUntil ? 'Reaktivieren' : 'Deaktivieren'}
                   </button>
                 </td>
@@ -224,7 +195,7 @@ export function UsersPage() {
                     type="button"
                     disabled={requestingFeedbackFor === u.id || openFeedbackRequestUserIds.has(u.id)}
                     onClick={() => requestFeedback(u)}
-                    style={{ cursor: 'pointer' }}
+                    style={secondaryBtnStyle}
                   >
                     {openFeedbackRequestUserIds.has(u.id) ? 'Angefragt' : 'Feedback anfragen'}
                   </button>
@@ -232,22 +203,8 @@ export function UsersPage() {
               </tr>
               {expandedUserId === u.id && (
                 <tr>
-                  <td colSpan={7} style={{ padding: '6px 8px 14px', background: '#fafafa' }}>
-                    {wineLoadError && <span style={{ color: '#b3261e' }}>{wineLoadError}</span>}
-                    {!wineLoadError && !userWines && <span>Wird geladen ...</span>}
-                    {userWines && userWines.length === 0 && <span style={{ opacity: 0.6 }}>Keine Weine.</span>}
-                    {userWines && userWines.length > 0 && (
-                      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
-                        {userWines.map((w) => (
-                          <li key={w.id}>
-                            {w.name}
-                            {w.producer ? ` · ${w.producer}` : ''}
-                            {w.vintage ? ` · ${w.vintage}` : ''} · {w.quantity}x
-                            {w.is_wishlist ? ' · Wunschliste' : w.is_consumed ? ' · Getrunken' : ''}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                  <td colSpan={7} style={{ padding: '10px 8px 18px', background: colors.bg }}>
+                    <UserDetailPanel userId={u.id} />
                   </td>
                 </tr>
               )}

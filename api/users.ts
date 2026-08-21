@@ -10,6 +10,7 @@ const BAN_DURATION = '87600h';
 interface AdminUserRow {
   id: string;
   email: string | null;
+  displayName: string | null;
   createdAt: string;
   lastSignInAt: string | null;
   bannedUntil: string | null;
@@ -34,6 +35,7 @@ async function listUsersWithWineCounts(): Promise<AdminUserRow[]> {
     .map((u) => ({
       id: u.id,
       email: u.email ?? null,
+      displayName: (u.user_metadata?.display_name as string | undefined) ?? null,
       createdAt: u.created_at,
       lastSignInAt: u.last_sign_in_at ?? null,
       // ban_duration liegt weit in der Zukunft, wenn aktiv gesperrt; sonst leer.
@@ -59,9 +61,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const body = (req.body ?? {}) as {
         userId?: string;
-        action?: 'ban' | 'unban' | 'create';
+        action?: 'ban' | 'unban' | 'create' | 'setDisplayName';
         email?: string;
         password?: string;
+        displayName?: string;
       };
       const supabase = getSupabaseAdmin();
 
@@ -72,14 +75,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(400).json({ error: 'E-Mail und Passwort (mind. 8 Zeichen) erforderlich.' });
           return;
         }
-        const { error } = await supabase.auth.admin.createUser({ email, password, email_confirm: true });
+        const { error } = await supabase.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: body.displayName?.trim() ? { display_name: body.displayName.trim() } : undefined,
+        });
+        if (error) throw error;
+        res.status(200).json({ ok: true });
+        return;
+      }
+
+      if (body.action === 'setDisplayName') {
+        if (!body.userId) {
+          res.status(400).json({ error: 'userId erforderlich.' });
+          return;
+        }
+        const { error } = await supabase.auth.admin.updateUserById(body.userId, {
+          user_metadata: { display_name: body.displayName?.trim() || null },
+        });
         if (error) throw error;
         res.status(200).json({ ok: true });
         return;
       }
 
       if (!body.userId || (body.action !== 'ban' && body.action !== 'unban')) {
-        res.status(400).json({ error: 'userId und action ("ban"|"unban"|"create") erforderlich.' });
+        res.status(400).json({ error: 'userId und action ("ban"|"unban"|"create"|"setDisplayName") erforderlich.' });
         return;
       }
       const { error } = await supabase.auth.admin.updateUserById(body.userId, {

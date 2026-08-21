@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
+import { colors } from '../theme';
 
 interface CostRow {
   id: string;
@@ -78,7 +79,7 @@ export function CostsPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ border: '1px solid #ccc', borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ border: `1px solid ${colors.border}`, borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong style={{ fontSize: 14 }}>Neuer Kosten-Eintrag</strong>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -110,7 +111,7 @@ export function CostsPage() {
         </button>
       </div>
 
-      {error && <p style={{ color: '#b3261e' }}>{error}</p>}
+      {error && <p style={{ color: colors.danger }}>{error}</p>}
       {!costs && <p>Wird geladen ...</p>}
 
       {costs && (
@@ -129,7 +130,7 @@ export function CostsPage() {
                     type="button"
                     disabled={busyId === c.id}
                     onClick={() => handleDelete(c)}
-                    style={{ cursor: 'pointer', color: '#b3261e' }}
+                    style={{ cursor: 'pointer', color: colors.danger }}
                   >
                     Loeschen
                   </button>

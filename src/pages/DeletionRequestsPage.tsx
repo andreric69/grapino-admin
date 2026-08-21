@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
+import { cardStyle, colors, secondaryBtnStyle } from '../theme';
 
 interface DeletionRequest {
   id: string;
@@ -53,14 +54,14 @@ export function DeletionRequestsPage() {
     }
   }
 
-  if (error) return <p style={{ color: '#b3261e' }}>{error}</p>;
+  if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!requests) return <p>Wird geladen ...</p>;
   if (requests.length === 0) return <p style={{ opacity: 0.7 }}>Keine offenen Loeschanfragen.</p>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {requests.map((r) => (
-        <div key={r.id} style={{ border: '1px solid #ccc', borderRadius: 6, padding: 12, fontSize: 14 }}>
+        <div key={r.id} style={cardStyle}>
           <div>
             <strong>{r.email ?? r.userId}</strong> moechte die gesamte Sammlung loeschen ({r.wineCount}{' '}
             {r.wineCount === 1 ? 'Wein' : 'Weine'})
@@ -73,11 +74,11 @@ export function DeletionRequestsPage() {
               type="button"
               disabled={busyId === r.id}
               onClick={() => handle(r, 'approve')}
-              style={{ cursor: 'pointer', color: '#b3261e' }}
+              style={{ ...secondaryBtnStyle, color: colors.danger, borderColor: colors.danger }}
             >
               Bestaetigen &amp; loeschen
             </button>
-            <button type="button" disabled={busyId === r.id} onClick={() => handle(r, 'reject')} style={{ cursor: 'pointer' }}>
+            <button type="button" disabled={busyId === r.id} onClick={() => handle(r, 'reject')} style={secondaryBtnStyle}>
               Ablehnen
             </button>
           </div>

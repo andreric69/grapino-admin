@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
+import { colors } from '../theme';
 
 interface Announcement {
   id: string;
@@ -142,7 +143,7 @@ export function AnnouncementsPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ border: '1px solid #ccc', borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ border: `1px solid ${colors.border}`, borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong style={{ fontSize: 14 }}>Neue Ankuendigung</strong>
         <input
           placeholder="Titel"
@@ -198,13 +199,13 @@ export function AnnouncementsPage() {
         </button>
       </div>
 
-      {error && <p style={{ color: '#b3261e' }}>{error}</p>}
+      {error && <p style={{ color: colors.danger }}>{error}</p>}
       {!announcements && <p>Wird geladen ...</p>}
       {announcements && announcements.length === 0 && <p style={{ opacity: 0.7 }}>Noch keine Ankuendigungen.</p>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {announcements?.map((a) => (
-          <div key={a.id} style={{ border: '1px solid #ccc', borderRadius: 6, padding: 12, fontSize: 14, opacity: a.isActive ? 1 : 0.5 }}>
+          <div key={a.id} style={{ border: `1px solid ${colors.border}`, borderRadius: 6, padding: 12, fontSize: 14, opacity: a.isActive ? 1 : 0.5 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <strong>
                 {a.type === 'update' ? '🔄' : '📢'} {a.title}
@@ -224,7 +225,7 @@ export function AnnouncementsPage() {
                 type="button"
                 disabled={busyId === a.id}
                 onClick={() => handleDelete(a)}
-                style={{ cursor: 'pointer', color: '#b3261e' }}
+                style={{ cursor: 'pointer', color: colors.danger }}
               >
                 Loeschen
               </button>
