@@ -157,7 +157,8 @@ export function UsersPage() {
         </p>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+      <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, minWidth: 640 }}>
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: `1px solid ${colors.border}` }}>
             <th style={{ padding: '6px 8px' }}>Name / E-Mail</th>
@@ -212,6 +213,7 @@ export function UsersPage() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

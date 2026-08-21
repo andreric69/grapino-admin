@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { clearToken } from '../lib/apiClient';
 import { colors } from '../theme';
 import { UsersPage } from './UsersPage';
@@ -40,95 +40,174 @@ const NAV: { key: Tab; label: string; icon: string }[] = [
   { key: 'costs', label: 'Kosten', icon: '\u{1F4B8}' },
 ];
 
+const MOBILE_BREAKPOINT = '(max-width: 768px)';
+
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(MOBILE_BREAKPOINT).matches : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_BREAKPOINT);
+    const onChange = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isMobile;
+}
+
 export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [tab, setTab] = useState<Tab>('users');
+  const isMobile = useIsMobile();
+  const [navOpen, setNavOpen] = useState(false);
 
   function handleLogout() {
     clearToken();
     onLoggedOut();
   }
 
-  return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: colors.bg, color: colors.text }}>
-      <div
-        style={{
-          width: 210,
-          flexShrink: 0,
-          borderRight: `1px solid ${colors.border}`,
-          background: colors.surface,
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'sticky',
-          top: 0,
-          height: '100vh',
-        }}
-      >
-        <div style={{ padding: '18px 16px', borderBottom: `1px solid ${colors.border}` }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: colors.accent }}>Grapino Admin</div>
-        </div>
-        <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 8px' }}>
-          {NAV.map((n) => (
-            <button
-              key={n.key}
-              type="button"
-              onClick={() => setTab(n.key)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                width: '100%',
-                textAlign: 'left',
-                cursor: 'pointer',
-                padding: '8px 10px',
-                marginBottom: 2,
-                fontSize: 13.5,
-                border: 'none',
-                borderRadius: 6,
-                background: tab === n.key ? colors.accentSoft : 'transparent',
-                color: tab === n.key ? colors.accent : colors.text,
-                fontWeight: tab === n.key ? 600 : 400,
-              }}
-            >
-              <span style={{ fontSize: 14 }}>{n.icon}</span>
-              {n.label}
-            </button>
-          ))}
-        </nav>
-        <div style={{ padding: 12, borderTop: `1px solid ${colors.border}` }}>
+  function selectTab(key: Tab) {
+    setTab(key);
+    setNavOpen(false);
+  }
+
+  const sidebar = (
+    <div
+      style={{
+        width: isMobile ? '78vw' : 210,
+        maxWidth: isMobile ? 280 : undefined,
+        flexShrink: 0,
+        borderRight: `1px solid ${colors.border}`,
+        background: colors.surface,
+        display: 'flex',
+        flexDirection: 'column',
+        ...(isMobile
+          ? {
+              position: 'fixed' as const,
+              inset: 0,
+              zIndex: 30,
+              transform: navOpen ? 'translateX(0)' : 'translateX(-100%)',
+              transition: 'transform 0.2s ease',
+              paddingTop: 'env(safe-area-inset-top)',
+              paddingBottom: 'env(safe-area-inset-bottom)',
+            }
+          : { position: 'sticky' as const, top: 0, height: '100vh' }),
+      }}
+    >
+      <div style={{ padding: '18px 16px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: colors.accent }}>Grapino Admin</div>
+        {isMobile && (
           <button
             type="button"
-            onClick={handleLogout}
+            aria-label="Menue schliessen"
+            onClick={() => setNavOpen(false)}
+            style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: colors.textMuted, padding: 4 }}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 8px' }}>
+        {NAV.map((n) => (
+          <button
+            key={n.key}
+            type="button"
+            onClick={() => selectTab(n.key)}
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
               width: '100%',
+              textAlign: 'left',
               cursor: 'pointer',
-              padding: '8px 10px',
-              fontSize: 13,
-              border: `1px solid ${colors.border}`,
+              padding: '10px 10px',
+              marginBottom: 2,
+              fontSize: 14,
+              border: 'none',
               borderRadius: 6,
-              background: colors.surface,
-              color: colors.textMuted,
+              background: tab === n.key ? colors.accentSoft : 'transparent',
+              color: tab === n.key ? colors.accent : colors.text,
+              fontWeight: tab === n.key ? 600 : 400,
             }}
           >
-            Abmelden
+            <span style={{ fontSize: 15 }}>{n.icon}</span>
+            {n.label}
           </button>
-        </div>
+        ))}
+      </nav>
+      <div style={{ padding: 12, borderTop: `1px solid ${colors.border}` }}>
+        <button
+          type="button"
+          onClick={handleLogout}
+          style={{
+            width: '100%',
+            cursor: 'pointer',
+            padding: '10px 10px',
+            fontSize: 13.5,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 6,
+            background: colors.surface,
+            color: colors.textMuted,
+          }}
+        >
+          Abmelden
+        </button>
       </div>
+    </div>
+  );
 
-      <div style={{ flex: 1, padding: '28px 32px', maxWidth: 1000 }}>
-        <h1 style={{ fontSize: 19, margin: '0 0 20px', color: colors.text }}>
-          {NAV.find((n) => n.key === tab)?.label}
-        </h1>
-        {tab === 'deletions' && <DeletionRequestsPage />}
-        {tab === 'users' && <UsersPage />}
-        {tab === 'messages' && <MessagesPage />}
-        {tab === 'payments' && <PaymentRequestsPage />}
-        {tab === 'orders' && <OrdersPage />}
-        {tab === 'announcements' && <AnnouncementsPage />}
-        {tab === 'feedback' && <FeedbackPage />}
-        {tab === 'email' && <EmailTemplatesPage />}
-        {tab === 'activity' && <ActivityPage />}
-        {tab === 'storage' && <StoragePage />}
-        {tab === 'costs' && <CostsPage />}
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: colors.bg, color: colors.text }}>
+      {sidebar}
+      {isMobile && navOpen && (
+        <div
+          onClick={() => setNavOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 25 }}
+        />
+      )}
+
+      <div style={{ flex: 1, minWidth: 0, maxWidth: isMobile ? undefined : 1000 }}>
+        {isMobile && (
+          <div
+            style={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 10,
+              background: colors.surface,
+              borderBottom: `1px solid ${colors.border}`,
+              padding: 'calc(10px + env(safe-area-inset-top)) 14px 10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
+            <button
+              type="button"
+              aria-label="Menue oeffnen"
+              onClick={() => setNavOpen(true)}
+              style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', padding: 4, color: colors.text }}
+            >
+              ☰
+            </button>
+            <strong style={{ fontSize: 15 }}>{NAV.find((n) => n.key === tab)?.label}</strong>
+          </div>
+        )}
+
+        <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>
+          {!isMobile && (
+            <h1 style={{ fontSize: 19, margin: '0 0 20px', color: colors.text }}>{NAV.find((n) => n.key === tab)?.label}</h1>
+          )}
+          {tab === 'deletions' && <DeletionRequestsPage />}
+          {tab === 'users' && <UsersPage />}
+          {tab === 'messages' && <MessagesPage />}
+          {tab === 'payments' && <PaymentRequestsPage />}
+          {tab === 'orders' && <OrdersPage />}
+          {tab === 'announcements' && <AnnouncementsPage />}
+          {tab === 'feedback' && <FeedbackPage />}
+          {tab === 'email' && <EmailTemplatesPage />}
+          {tab === 'activity' && <ActivityPage />}
+          {tab === 'storage' && <StoragePage />}
+          {tab === 'costs' && <CostsPage />}
+        </div>
       </div>
     </div>
   );
