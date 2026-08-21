@@ -18,7 +18,7 @@ export function StoragePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch('/api/storage-usage').then(async (res) => {
+    apiFetch('/api/reports?resource=storage').then(async (res) => {
       if (!res.ok) {
         setError('Speicherinfo konnte nicht geladen werden.');
         return;

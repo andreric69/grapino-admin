@@ -39,7 +39,7 @@ export function UsersPage() {
     setError(null);
     const [usersRes, feedbackRequestRes] = await Promise.all([
       apiFetch('/api/users'),
-      apiFetch('/api/feedback-request'),
+      apiFetch('/api/feedback?resource=requests'),
     ]);
     if (!usersRes.ok) {
       setError('Nutzerliste konnte nicht geladen werden.');
@@ -115,7 +115,7 @@ export function UsersPage() {
     if (!window.confirm(`Bei ${user.email ?? user.id} Feedback anfragen? Das Popup erscheint beim naechsten App-Start.`)) return;
     setRequestingFeedbackFor(user.id);
     try {
-      const res = await apiFetch('/api/feedback-request', {
+      const res = await apiFetch('/api/feedback?resource=requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id }),

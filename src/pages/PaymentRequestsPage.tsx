@@ -30,7 +30,7 @@ export function PaymentRequestsPage() {
 
   async function load() {
     setError(null);
-    const [reqRes, usersRes] = await Promise.all([apiFetch('/api/payment-requests'), apiFetch('/api/users')]);
+    const [reqRes, usersRes] = await Promise.all([apiFetch('/api/commerce?resource=payments'), apiFetch('/api/users')]);
     if (!reqRes.ok) {
       setError('Zahlungsanfragen konnten nicht geladen werden.');
       return;
@@ -53,7 +53,7 @@ export function PaymentRequestsPage() {
     setSending(true);
     setError(null);
     try {
-      const res = await apiFetch('/api/payment-requests', {
+      const res = await apiFetch('/api/commerce?resource=payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: targetUserId, amount: parsedAmount, reason }),
@@ -72,7 +72,7 @@ export function PaymentRequestsPage() {
   async function updateStatus(r: PaymentRequest, status: 'paid' | 'cancelled') {
     setBusyId(r.id);
     try {
-      const res = await apiFetch('/api/payment-requests', {
+      const res = await apiFetch('/api/commerce?resource=payments', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: r.id, status }),

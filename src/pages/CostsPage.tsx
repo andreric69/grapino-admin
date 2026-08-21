@@ -21,7 +21,7 @@ export function CostsPage() {
 
   async function load() {
     setError(null);
-    const res = await apiFetch('/api/costs');
+    const res = await apiFetch('/api/reports?resource=costs');
     if (!res.ok) {
       setError('Kosten konnten nicht geladen werden.');
       return;
@@ -40,7 +40,7 @@ export function CostsPage() {
     setSending(true);
     setError(null);
     try {
-      const res = await apiFetch('/api/costs', {
+      const res = await apiFetch('/api/reports?resource=costs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label, amount: parsedAmount, note }),
@@ -61,7 +61,7 @@ export function CostsPage() {
     if (!window.confirm(`Eintrag "${c.label}" loeschen?`)) return;
     setBusyId(c.id);
     try {
-      const res = await apiFetch('/api/costs', {
+      const res = await apiFetch('/api/reports?resource=costs', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: c.id }),

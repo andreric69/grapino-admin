@@ -21,7 +21,7 @@ export function ActivityPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch('/api/activity').then(async (res) => {
+    apiFetch('/api/reports?resource=activity').then(async (res) => {
       if (!res.ok) {
         setError('Aktivitaet konnte nicht geladen werden.');
         return;

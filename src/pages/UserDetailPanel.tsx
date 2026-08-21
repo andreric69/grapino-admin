@@ -33,7 +33,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
 
   async function load() {
     setError(null);
-    const res = await apiFetch(`/api/user-detail?userId=${encodeURIComponent(userId)}`);
+    const res = await apiFetch(`/api/users?userId=${encodeURIComponent(userId)}`);
     if (!res.ok) {
       setError('Details konnten nicht geladen werden.');
       return;
@@ -50,10 +50,10 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     if (!noteText.trim()) return;
     setSavingNote(true);
     try {
-      const res = await apiFetch('/api/user-notes', {
+      const res = await apiFetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, note: noteText.trim() }),
+        body: JSON.stringify({ action: 'addNote', userId, note: noteText.trim() }),
       });
       if (!res.ok) throw new Error();
       setNoteText('');

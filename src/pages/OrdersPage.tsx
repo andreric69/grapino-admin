@@ -30,7 +30,7 @@ export function OrdersPage() {
 
   async function load() {
     setError(null);
-    const res = await apiFetch('/api/orders');
+    const res = await apiFetch('/api/commerce?resource=orders');
     if (!res.ok) {
       setError('Auftraege konnten nicht geladen werden.');
       return;
@@ -46,7 +46,7 @@ export function OrdersPage() {
   async function updateStatus(o: Order, status: Order['status']) {
     setBusyId(o.id);
     try {
-      const res = await apiFetch('/api/orders', {
+      const res = await apiFetch('/api/commerce?resource=orders', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: o.id, status }),
