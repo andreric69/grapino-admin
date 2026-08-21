@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { colors } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 
 interface CostRow {
   id: string;
@@ -112,7 +113,7 @@ export function CostsPage() {
       </div>
 
       {error && <p style={{ color: colors.danger }}>{error}</p>}
-      {!costs && <p>Wird geladen ...</p>}
+      {!costs && <LoadingSpinner label="Wird geladen ..." />}
 
       {costs && (
         <div>

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { cardStyle, colors, inputStyle, primaryBtnStyle, secondaryBtnStyle } from '../theme';
 import { UserDetailPanel } from './UserDetailPanel';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 
 interface AdminUser {
   id: string;
@@ -130,7 +131,7 @@ export function UsersPage() {
   }
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
-  if (!users) return <p>Wird geladen ...</p>;
+  if (!users) return <LoadingSpinner label="Wird geladen ..." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { cardStyle, colors, inputStyle, primaryBtnStyle, secondaryBtnStyle } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 
 interface PaymentRequest {
   id: string;
@@ -117,7 +118,7 @@ export function PaymentRequestsPage() {
       </div>
 
       {error && <p style={{ color: colors.danger }}>{error}</p>}
-      {!requests && <p>Wird geladen ...</p>}
+      {!requests && <LoadingSpinner label="Wird geladen ..." />}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {requests?.map((r) => (

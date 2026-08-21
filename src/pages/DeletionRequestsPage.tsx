@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { cardStyle, colors, secondaryBtnStyle } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
 
 interface DeletionRequest {
   id: string;
@@ -55,8 +57,8 @@ export function DeletionRequestsPage() {
   }
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
-  if (!requests) return <p>Wird geladen ...</p>;
-  if (requests.length === 0) return <p style={{ opacity: 0.7 }}>Keine offenen Loeschanfragen.</p>;
+  if (!requests) return <LoadingSpinner label="Wird geladen ..." />;
+  if (requests.length === 0) return <EmptyState icon="🗑️" text="Keine offenen Loeschanfragen." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

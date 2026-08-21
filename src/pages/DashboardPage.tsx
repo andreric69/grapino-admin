@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { clearToken } from '../lib/apiClient';
-import { colors } from '../theme';
+import { colors, fontBody, fontHeading } from '../theme';
 import { UsersPage } from './UsersPage';
 import { DeletionRequestsPage } from './DeletionRequestsPage';
 import { AnnouncementsPage } from './AnnouncementsPage';
@@ -94,7 +94,7 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
       }}
     >
       <div style={{ padding: '18px 16px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: colors.accent }}>Grapino Admin</div>
+        <div style={{ fontFamily: fontHeading, fontSize: 18, fontWeight: 600, color: colors.accent }}>Grapino Admin</div>
         {isMobile && (
           <button
             type="button"
@@ -156,7 +156,7 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
   );
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: colors.bg, color: colors.text }}>
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: fontBody, background: colors.bg, color: colors.text }}>
       {sidebar}
       {isMobile && navOpen && (
         <div
@@ -194,7 +194,9 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
 
         <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>
           {!isMobile && (
-            <h1 style={{ fontSize: 19, margin: '0 0 20px', color: colors.text }}>{NAV.find((n) => n.key === tab)?.label}</h1>
+            <h1 style={{ fontFamily: fontHeading, fontWeight: 600, fontSize: 22, margin: '0 0 20px', color: colors.text }}>
+              {NAV.find((n) => n.key === tab)?.label}
+            </h1>
           )}
           {tab === 'deletions' && <DeletionRequestsPage />}
           {tab === 'users' && <UsersPage />}

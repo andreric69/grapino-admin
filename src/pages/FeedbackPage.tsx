@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { cardStyle, colors, inputStyle, primaryBtnStyle } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
 
 interface FeedbackRow {
   id: string;
@@ -53,8 +55,8 @@ export function FeedbackPage() {
   }
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
-  if (!feedback) return <p>Wird geladen ...</p>;
-  if (feedback.length === 0) return <p style={{ opacity: 0.7 }}>Noch kein Feedback.</p>;
+  if (!feedback) return <LoadingSpinner label="Wird geladen ..." />;
+  if (feedback.length === 0) return <EmptyState icon="⭐" text="Noch kein Feedback." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

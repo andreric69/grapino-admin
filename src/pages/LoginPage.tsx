@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { setToken } from '../lib/apiClient';
+import { colors, fontBody, fontHeading, inputStyle, primaryBtnStyle } from '../theme';
 
 export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [password, setPassword] = useState('');
@@ -32,19 +33,21 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', fontFamily: fontBody, background: colors.bg }}>
       <form onSubmit={handleSubmit} style={{ width: 280, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <h1 style={{ fontSize: 20, margin: 0 }}>Grapino Admin</h1>
+        <h1 style={{ fontFamily: fontHeading, fontWeight: 600, fontSize: 24, margin: '0 0 4px', color: colors.accent, textAlign: 'center' }}>
+          Grapino Admin
+        </h1>
         <input
           type="password"
           placeholder="Admin-Passwort"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoFocus
-          style={{ padding: '8px 10px', fontSize: 14 }}
+          style={inputStyle}
         />
-        {error && <div style={{ color: '#b3261e', fontSize: 13 }}>{error}</div>}
-        <button type="submit" disabled={busy || !password} style={{ padding: '8px 10px', fontSize: 14, cursor: 'pointer' }}>
+        {error && <div style={{ color: colors.danger, fontSize: 13 }}>{error}</div>}
+        <button type="submit" disabled={busy || !password} style={primaryBtnStyle}>
           {busy ? 'Wird geprueft ...' : 'Anmelden'}
         </button>
       </form>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { colors, inputStyle, secondaryBtnStyle } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 
 interface UserDetail {
   profile: {
@@ -66,7 +67,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   }
 
   if (error) return <span style={{ color: colors.danger }}>{error}</span>;
-  if (!detail) return <span>Wird geladen ...</span>;
+  if (!detail) return <LoadingSpinner label="Wird geladen ..." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, fontSize: 13 }}>

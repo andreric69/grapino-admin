@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { cardStyle, colors, secondaryBtnStyle } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
 
 interface UserMessage {
   id: string;
@@ -54,8 +56,8 @@ export function MessagesPage() {
   }
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
-  if (!messages) return <p>Wird geladen ...</p>;
-  if (messages.length === 0) return <p style={{ opacity: 0.7 }}>Noch keine Nachrichten.</p>;
+  if (!messages) return <LoadingSpinner label="Wird geladen ..." />;
+  if (messages.length === 0) return <EmptyState icon="💬" text="Noch keine Nachrichten." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

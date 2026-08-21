@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { cardStyle, colors, primaryBtnStyle, secondaryBtnStyle } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
 
 interface Order {
   id: string;
@@ -67,8 +69,8 @@ export function OrdersPage() {
   }
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
-  if (!orders) return <p>Wird geladen ...</p>;
-  if (orders.length === 0) return <p style={{ opacity: 0.7 }}>Noch keine Auftraege.</p>;
+  if (!orders) return <LoadingSpinner label="Wird geladen ..." />;
+  if (orders.length === 0) return <EmptyState icon="📋" text="Noch keine Auftraege." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { colors } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
 
 interface Announcement {
   id: string;
@@ -200,8 +202,8 @@ export function AnnouncementsPage() {
       </div>
 
       {error && <p style={{ color: colors.danger }}>{error}</p>}
-      {!announcements && <p>Wird geladen ...</p>}
-      {announcements && announcements.length === 0 && <p style={{ opacity: 0.7 }}>Noch keine Ankuendigungen.</p>}
+      {!announcements && <LoadingSpinner label="Wird geladen ..." />}
+      {announcements && announcements.length === 0 && <EmptyState icon="📣" text="Noch keine Ankuendigungen." />}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {announcements?.map((a) => (

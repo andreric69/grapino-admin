@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { colors } from '../theme';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
 
 interface ActivityEntry {
   at: string;
@@ -32,8 +34,8 @@ export function ActivityPage() {
   }, []);
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
-  if (!entries) return <p>Wird geladen ...</p>;
-  if (entries.length === 0) return <p style={{ opacity: 0.7 }}>Noch keine Aktivitaet.</p>;
+  if (!entries) return <LoadingSpinner label="Wird geladen ..." />;
+  if (entries.length === 0) return <EmptyState icon="📈" text="Noch keine Aktivitaet." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
