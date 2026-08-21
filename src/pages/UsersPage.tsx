@@ -40,15 +40,25 @@ export function UsersPage() {
   const [userWines, setUserWines] = useState<UserWine[] | null>(null);
   const [wineLoadError, setWineLoadError] = useState<string | null>(null);
 
+  const [openFeedbackRequestUserIds, setOpenFeedbackRequestUserIds] = useState<Set<string>>(new Set());
+  const [requestingFeedbackFor, setRequestingFeedbackFor] = useState<string | null>(null);
+
   async function load() {
     setError(null);
-    const res = await apiFetch('/api/users');
-    if (!res.ok) {
+    const [usersRes, feedbackRequestRes] = await Promise.all([
+      apiFetch('/api/users'),
+      apiFetch('/api/feedback-request'),
+    ]);
+    if (!usersRes.ok) {
       setError('Nutzerliste konnte nicht geladen werden.');
       return;
     }
-    const body = (await res.json()) as { users: AdminUser[] };
+    const body = (await usersRes.json()) as { users: AdminUser[] };
     setUsers(body.users);
+    if (feedbackRequestRes.ok) {
+      const fbBody = (await feedbackRequestRes.json()) as { openUserIds: string[] };
+      setOpenFeedbackRequestUserIds(new Set(fbBody.openUserIds));
+    }
   }
 
   useEffect(() => {
@@ -105,6 +115,24 @@ export function UsersPage() {
       setCreateError(e instanceof Error ? e.message : 'Anlegen fehlgeschlagen.');
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function requestFeedback(user: AdminUser) {
+    if (!window.confirm(`Bei ${user.email ?? user.id} Feedback anfragen? Das Popup erscheint beim naechsten App-Start.`)) return;
+    setRequestingFeedbackFor(user.id);
+    try {
+      const res = await apiFetch('/api/feedback-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      if (!res.ok) throw new Error();
+      setOpenFeedbackRequestUserIds((s) => new Set(s).add(user.id));
+    } catch {
+      setError('Feedback-Anfrage fehlgeschlagen.');
+    } finally {
+      setRequestingFeedbackFor(null);
     }
   }
 
@@ -170,6 +198,7 @@ export function UsersPage() {
             <th style={{ padding: '6px 8px' }}>Weine</th>
             <th style={{ padding: '6px 8px' }}>Status</th>
             <th style={{ padding: '6px 8px' }}></th>
+            <th style={{ padding: '6px 8px' }}></th>
           </tr>
         </thead>
         <tbody>
@@ -190,10 +219,20 @@ export function UsersPage() {
                     {u.bannedUntil ? 'Reaktivieren' : 'Deaktivieren'}
                   </button>
                 </td>
+                <td style={{ padding: '6px 8px' }}>
+                  <button
+                    type="button"
+                    disabled={requestingFeedbackFor === u.id || openFeedbackRequestUserIds.has(u.id)}
+                    onClick={() => requestFeedback(u)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {openFeedbackRequestUserIds.has(u.id) ? 'Angefragt' : 'Feedback anfragen'}
+                  </button>
+                </td>
               </tr>
               {expandedUserId === u.id && (
                 <tr>
-                  <td colSpan={6} style={{ padding: '6px 8px 14px', background: '#fafafa' }}>
+                  <td colSpan={7} style={{ padding: '6px 8px 14px', background: '#fafafa' }}>
                     {wineLoadError && <span style={{ color: '#b3261e' }}>{wineLoadError}</span>}
                     {!wineLoadError && !userWines && <span>Wird geladen ...</span>}
                     {userWines && userWines.length === 0 && <span style={{ opacity: 0.6 }}>Keine Weine.</span>}
