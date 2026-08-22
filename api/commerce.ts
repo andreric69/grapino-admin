@@ -66,6 +66,11 @@ async function syncWineKnowledgeCache(supabase: SupabaseClient, wineIds: string[
     .map((w) => ({
       name_key: w.name.trim().toLowerCase(),
       producer_key: (w.producer ?? '').trim().toLowerCase(),
+      // Richtig geschriebene Form zusaetzlich zum Kleinschreib-Schluessel -
+      // wird gebraucht, wenn ein spaeterer Scan denselben Wein nur ueber
+      // Name+Jahrgang findet (kein Produzent auf dem Etikett erkennbar) und
+      // den Produzenten selbst als Vorschlag uebernehmen will.
+      producer: w.producer,
       vintage: w.vintage,
       grape_variety: w.grape_variety,
       region: w.region,
