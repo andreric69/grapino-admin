@@ -3,15 +3,21 @@ import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// Aktivitaets-Feed, Kosten-Uebersicht und Speicher-Uebersicht zusammen in
-// einer Datei - wegen Vercels 12-Funktionen-Limit auf dem Hobby-Plan,
-// ausgewaehlt via ?resource=activity|costs|storage.
+// Aktivitaets-Feed, Kosten-Uebersicht, Speicher-Uebersicht und KI-Nutzung
+// zusammen in einer Datei - wegen Vercels 12-Funktionen-Limit auf dem
+// Hobby-Plan, ausgewaehlt via ?resource=activity|costs|storage|ai-usage.
 
 const BUCKET = 'wine-photos';
 // Supabase-Speicherlimit fuer den aktuellen Plan (MB) - im Supabase-Dashboard
 // unter Settings -> Billing -> Usage nachpruefen/anpassen, falls sich der
 // Plan oder das Limit aendert. Free-Tier lag zuletzt bei ca. 1 GB.
 const TOTAL_QUOTA_MB = 1024;
+
+// Grobe Schaetzung pro Scan (Claude Sonnet 5, Bild + kurze strukturierte
+// Antwort) - siehe api/recognize-label.ts in der Weinapp. Keine exakte
+// Abrechnung, nur eine Groessenordnung fuer diese Uebersicht.
+const AI_ESTIMATED_COST_PER_SCAN_CHF = 0.01;
+const AI_DAILY_LIMIT = 100;
 
 interface ActivityEntry {
   at: string;
@@ -112,6 +118,47 @@ async function buildStorageUsage(supabase: SupabaseClient) {
   };
 }
 
+async function buildAiUsage(supabase: SupabaseClient) {
+  const [allUsers, logsRes] = await Promise.all([
+    listAllUsers(supabase),
+    supabase.from('label_recognition_log').select('user_id, created_at'),
+  ]);
+  if (logsRes.error) throw logsRes.error;
+
+  const emailById = new Map(allUsers.map((u) => [u.id, u.email ?? null]));
+  const todayCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const perUser = new Map<string, { total: number; today: number; lastUsed: string | null }>();
+  for (const row of logsRes.data ?? []) {
+    const entry = perUser.get(row.user_id) ?? { total: 0, today: 0, lastUsed: null };
+    entry.total += 1;
+    if (row.created_at >= todayCutoff) entry.today += 1;
+    if (!entry.lastUsed || row.created_at > entry.lastUsed) entry.lastUsed = row.created_at;
+    perUser.set(row.user_id, entry);
+  }
+
+  const perUserList = Array.from(perUser.entries())
+    .map(([userId, stats]) => ({
+      userId,
+      email: emailById.get(userId) ?? null,
+      total: stats.total,
+      today: stats.today,
+      dailyLimit: AI_DAILY_LIMIT,
+      lastUsed: stats.lastUsed,
+      estimatedCostChf: Math.round(stats.total * AI_ESTIMATED_COST_PER_SCAN_CHF * 100) / 100,
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  const totalScans = perUserList.reduce((sum, u) => sum + u.total, 0);
+
+  return {
+    perUser: perUserList,
+    totalScans,
+    estimatedTotalCostChf: Math.round(totalScans * AI_ESTIMATED_COST_PER_SCAN_CHF * 100) / 100,
+    estimatedCostPerScanChf: AI_ESTIMATED_COST_PER_SCAN_CHF,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isAuthorized(req)) {
     res.status(401).json({ error: 'Nicht angemeldet.' });
@@ -137,6 +184,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
       res.status(200).json(await buildStorageUsage(supabase));
+      return;
+    }
+
+    if (resource === 'ai-usage') {
+      if (req.method !== 'GET') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+      }
+      res.status(200).json(await buildAiUsage(supabase));
       return;
     }
 
@@ -212,7 +268,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    res.status(400).json({ error: 'resource ("activity"|"costs"|"storage") erforderlich.' });
+    res.status(400).json({ error: 'resource ("activity"|"costs"|"storage"|"ai-usage") erforderlich.' });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
   }
