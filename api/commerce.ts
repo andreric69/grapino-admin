@@ -8,7 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // ?resource=orders|payments|pricing.
 
 const PRICING_FIELDS =
-  'trinkfenster_price, name_price, refresh_price, neue_weine_price, ultra_price, minimum_price, updated_at';
+  'trinkfenster_price, name_price, refresh_price, neue_weine_price, ultra_price, minimum_price, access_fee, updated_at';
 
 const CATEGORY_LABELS: Record<string, string> = {
   trinkfenster: 'Nur Trinkfenster',
@@ -169,6 +169,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'neue_weine_price',
           'ultra_price',
           'minimum_price',
+          'access_fee',
         ];
         const update: Record<string, number> = {};
         for (const field of allowedFields) {

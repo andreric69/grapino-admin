@@ -10,10 +10,11 @@ interface PricingConfig {
   neue_weine_price: number;
   ultra_price: number;
   minimum_price: number;
+  access_fee: number;
   updated_at: string;
 }
 
-const FIELDS: { key: keyof Omit<PricingConfig, 'updated_at'>; label: string; hint: string }[] = [
+const FIELDS: { key: keyof Omit<PricingConfig, 'updated_at' | 'access_fee'>; label: string; hint: string }[] = [
   { key: 'trinkfenster_price', label: 'Nur Trinkfenster (CHF/Wein)', hint: '' },
   { key: 'name_price', label: 'Nur Name (CHF/Wein)', hint: '' },
   { key: 'refresh_price', label: 'Refresh - alles aktualisieren (CHF/Wein)', hint: '' },
@@ -53,7 +54,10 @@ export function PricingPage() {
     }
     const data = (await res.json()) as { pricing: PricingConfig };
     setPricing(data.pricing);
-    setDraft(Object.fromEntries(FIELDS.map((f) => [f.key, String(data.pricing[f.key])])));
+    setDraft({
+      ...Object.fromEntries(FIELDS.map((f) => [f.key, String(data.pricing[f.key])])),
+      access_fee: String(data.pricing.access_fee),
+    });
   }
 
   useEffect(() => {
@@ -73,6 +77,11 @@ export function PricingPage() {
         }
         body[f.key] = parsed;
       }
+      const accessFeeParsed = parseFloat(draft.access_fee?.replace(',', '.') ?? '');
+      if (Number.isNaN(accessFeeParsed) || accessFeeParsed < 0) {
+        throw new Error('Einmalige Zugangsgebuehr: ungueltiger Wert.');
+      }
+      body.access_fee = accessFeeParsed;
       const res = await apiFetch('/api/commerce?resource=pricing', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -96,6 +105,20 @@ export function PricingPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 480 }}>
       <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 12.5, opacity: 0.7, marginBottom: 4 }}>
+            Einmalige Zugangsgebuehr pro Nutzer (CHF)
+          </label>
+          <input
+            value={draft.access_fee ?? ''}
+            onChange={(e) => setDraft((d) => ({ ...d, access_fee: e.target.value }))}
+            style={{ ...inputStyle, width: '100%' }}
+          />
+          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 2 }}>
+            Wird in der Weinapp im Impressum angezeigt - kein Auftragspreis, gilt einmalig pro neuem Nutzer.
+          </div>
+        </div>
+        <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 12 }} />
         {FIELDS.map((f) => (
           <div key={f.key}>
             <label style={{ display: 'block', fontSize: 12.5, opacity: 0.7, marginBottom: 4 }}>{f.label}</label>
