@@ -33,6 +33,60 @@ interface WineRef {
   vintage: number | null;
 }
 
+const KNOWLEDGE_FIELDS = [
+  'grape_variety',
+  'region',
+  'subregion',
+  'country',
+  'wine_type',
+  'drink_from',
+  'drink_to',
+  'critic_scores',
+  'food_pairing',
+] as const;
+
+/**
+ * Schreibt Trinkfenster/Kritiker-Punkte/Food-Pairing (plus die uebrigen
+ * recherchierbaren Felder) der Weine eines erledigten Auftrags in den
+ * geteilten wine_knowledge_cache - reiner Nebeneffekt, kein eigenes
+ * Kurations-UI noetig. Ab dann sieht JEDER Nutzer, der denselben Wein
+ * (Name+Produzent+Jahrgang) scannt, diese Angaben sofort, ohne dass fuer
+ * ihn erneut recherchiert werden muss.
+ */
+async function syncWineKnowledgeCache(supabase: SupabaseClient, wineIds: string[]): Promise<void> {
+  if (wineIds.length === 0) return;
+  const { data: wines, error } = await supabase
+    .from('wines')
+    .select('name, producer, vintage, grape_variety, region, subregion, country, wine_type, drink_from, drink_to, critic_scores, food_pairing')
+    .in('id', wineIds);
+  if (error) throw error;
+
+  const rows = (wines ?? [])
+    .filter((w) => KNOWLEDGE_FIELDS.some((field) => (w as Record<string, unknown>)[field] !== null))
+    .map((w) => ({
+      name_key: w.name.trim().toLowerCase(),
+      producer_key: (w.producer ?? '').trim().toLowerCase(),
+      vintage: w.vintage,
+      grape_variety: w.grape_variety,
+      region: w.region,
+      subregion: w.subregion,
+      country: w.country,
+      wine_type: w.wine_type,
+      drink_from: w.drink_from,
+      drink_to: w.drink_to,
+      critic_scores: w.critic_scores,
+      food_pairing: w.food_pairing,
+      source: 'admin_research',
+      updated_at: new Date().toISOString(),
+    }));
+  if (rows.length === 0) return;
+
+  const { error: upsertError } = await supabase
+    .from('wine_knowledge_cache')
+    .upsert(rows, { onConflict: 'name_key,producer_key,vintage' });
+  if (upsertError) throw upsertError;
+}
+
 async function listOrders(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('enrichment_orders')
@@ -101,8 +155,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(400).json({ error: 'id und status erforderlich.' });
           return;
         }
+        // wine_ids vor dem Status-Update lesen, statt sie ueber den Body zu
+        // vertrauen - der Auftrag selbst kennt seine Weine bereits.
+        const { data: order, error: fetchError } = await supabase
+          .from('enrichment_orders')
+          .select('wine_ids')
+          .eq('id', id)
+          .single();
+        if (fetchError) throw fetchError;
+
         const { error } = await supabase.from('enrichment_orders').update({ status }).eq('id', id);
         if (error) throw error;
+
+        if (status === 'done') {
+          // Nebeneffekt, kein kritischer Schritt - schlaegt der Cache-Sync
+          // fehl, ist der Auftrag trotzdem korrekt als erledigt markiert.
+          await syncWineKnowledgeCache(supabase, (order?.wine_ids as string[] | null) ?? []).catch((e) => {
+            console.error('wine_knowledge_cache Sync fehlgeschlagen:', e);
+          });
+        }
+
         res.status(200).json({ ok: true });
         return;
       }
