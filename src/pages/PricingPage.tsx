@@ -22,6 +22,16 @@ const FIELDS: { key: keyof Omit<PricingConfig, 'updated_at'>; label: string; hin
   { key: 'minimum_price', label: 'Mindestbetrag pro Auftrag (CHF)', hint: 'Gilt fuer jede Kategorie, unabhaengig von der Flaschenzahl.' },
 ];
 
+// Gleiche Formel wie computeOrderPrice() in der Weinapp (src/lib/pricingConfig.ts)
+// - hier dupliziert, da beide Apps getrennte Codebasen ohne gemeinsames
+// Paket sind (gleiches Muster wie CATEGORY_LABELS in api/commerce.ts).
+function computeOrderPrice(pricePerWine: number, minimum: number, wineCount: number): number {
+  const raw = pricePerWine * Math.sqrt(wineCount);
+  return Math.max(minimum, Math.round(raw * 20) / 20);
+}
+
+const PRICE_TABLE_COUNTS = [10, 50, 100, 200, 500, 1000];
+
 /**
  * Alle Preise wirken in der Weinapp progressiv (Quadratwurzel der
  * Flaschenzahl statt linear) - der hier eingestellte Wert ist jeweils der
@@ -81,6 +91,8 @@ export function PricingPage() {
   if (error && !pricing) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!pricing) return <LoadingSpinner label="Wird geladen ..." />;
 
+  const draftMinimum = parseFloat(draft.minimum_price?.replace(',', '.') ?? '') || 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 480 }}>
       <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -106,6 +118,39 @@ export function PricingPage() {
         Flasche, bei grossen Mengen wird es automatisch guenstiger pro Flasche. Aenderungen wirken sofort fuer alle
         neuen Auftraege.
       </p>
+
+      <div style={{ ...cardStyle, overflowX: 'auto' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>
+          Vorschau (mit den Werten oben, auch ungespeichert)
+        </div>
+        <table style={{ borderCollapse: 'collapse', fontSize: 12.5, width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: `1px solid ${colors.border}` }}>Kategorie</th>
+              {PRICE_TABLE_COUNTS.map((n) => (
+                <th key={n} style={{ textAlign: 'right', padding: '4px 8px', borderBottom: `1px solid ${colors.border}` }}>
+                  {n}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {FIELDS.filter((f) => f.key !== 'minimum_price').map((f) => {
+              const perWine = parseFloat(draft[f.key]?.replace(',', '.') ?? '') || 0;
+              return (
+                <tr key={f.key}>
+                  <td style={{ padding: '4px 8px' }}>{f.label.replace(/\s*\(CHF\/Wein\)/, '')}</td>
+                  {PRICE_TABLE_COUNTS.map((n) => (
+                    <td key={n} style={{ textAlign: 'right', padding: '4px 8px' }}>
+                      {computeOrderPrice(perWine, draftMinimum, n).toFixed(2)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
