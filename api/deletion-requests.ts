@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
-import { getSupabaseAdmin } from './_supabaseAdmin.js';
+import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 
 interface DeletionRequestRow {
   id: string;
@@ -24,9 +24,8 @@ async function listPendingRequests(): Promise<DeletionRequestRow[]> {
 
   const userIds = Array.from(new Set(requests.map((r) => r.user_id)));
 
-  const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 200 });
-  if (usersError) throw usersError;
-  const emailById = new Map(usersData.users.map((u) => [u.id, u.email ?? null]));
+  const allUsers = await listAllUsers(supabase);
+  const emailById = new Map(allUsers.map((u) => [u.id, u.email ?? null]));
 
   const { data: wines, error: winesError } = await supabase
     .from('wines')
@@ -80,6 +79,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
+      // Der SELECT oben diente nur der Vorpruefung/Anzeige - zwischen ihm und
+      // hier koennte der Nutzer die Anfrage in der Weinapp selbst zurueck-
+      // genommen haben (er darf das, solange sie noch "pending" ist). Deshalb
+      // wird der Status-Wechsel selbst atomar UND ZUERST gemacht (bedingt auf
+      // status='pending', mit .select() um zu sehen ob wirklich eine Zeile
+      // getroffen wurde) - erst wenn dieser "Claim" wirklich glueckt, werden
+      // die eigentlich zerstoerenden Schritte (Fotos/Weine loeschen)
+      // ausgefuehrt. Vorher lief das in der falschen Reihenfolge (erst
+      // loeschen, dann Status setzen, ohne den Claim zu pruefen) - eine
+      // zwischenzeitliche Ruecknahme haette die Weine trotzdem geloescht,
+      // aber am Ende lautlos 0 Zeilen aktualisiert, ohne dass das auffiel.
+      const { data: claimed, error: claimError } = await supabase
+        .from('deletion_requests')
+        .update({ status: action === 'approve' ? 'approved' : 'rejected', reviewed_at: new Date().toISOString() })
+        .eq('id', requestId)
+        .eq('status', 'pending')
+        .select('id');
+      if (claimError) throw claimError;
+      if (!claimed || claimed.length === 0) {
+        res.status(409).json({ error: 'Anfrage ist nicht mehr offen (evtl. inzwischen zurueckgenommen oder bereits bearbeitet).' });
+        return;
+      }
+
       if (action === 'approve') {
         // Fotos aus dem Storage-Bucket UND alle Weine des Nutzers loeschen -
         // dieselbe Aktion, die vorher direkt aus der Weinapp heraus lief.
@@ -98,12 +120,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { error: deleteError } = await supabase.from('wines').delete().eq('user_id', request.user_id);
         if (deleteError) throw deleteError;
       }
-
-      const { error: updateError } = await supabase
-        .from('deletion_requests')
-        .update({ status: action === 'approve' ? 'approved' : 'rejected', reviewed_at: new Date().toISOString() })
-        .eq('id', requestId);
-      if (updateError) throw updateError;
 
       res.status(200).json({ ok: true });
       return;

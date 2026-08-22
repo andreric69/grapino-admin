@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
-import { getSupabaseAdmin } from './_supabaseAdmin.js';
+import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Aktivitaets-Feed, Kosten-Uebersicht und Speicher-Uebersicht zusammen in
@@ -23,8 +23,8 @@ interface ActivityEntry {
 const LIMIT_PER_SOURCE = 30;
 
 async function buildActivity(supabase: SupabaseClient): Promise<ActivityEntry[]> {
-  const [usersRes, winesRes, consumptionRes, deletionRes, feedbackRes] = await Promise.all([
-    supabase.auth.admin.listUsers({ perPage: 200 }),
+  const [allUsers, winesRes, consumptionRes, deletionRes, feedbackRes] = await Promise.all([
+    listAllUsers(supabase),
     supabase.from('wines').select('created_at, user_id, name').order('created_at', { ascending: false }).limit(LIMIT_PER_SOURCE),
     supabase
       .from('wine_consumption_log')
@@ -38,11 +38,11 @@ async function buildActivity(supabase: SupabaseClient): Promise<ActivityEntry[]>
       .limit(LIMIT_PER_SOURCE),
     supabase.from('app_feedback').select('created_at, user_id, rating').order('created_at', { ascending: false }).limit(LIMIT_PER_SOURCE),
   ]);
-  for (const r of [usersRes, winesRes, consumptionRes, deletionRes, feedbackRes]) {
+  for (const r of [winesRes, consumptionRes, deletionRes, feedbackRes]) {
     if (r.error) throw r.error;
   }
 
-  const emailById = new Map(usersRes.data.users.map((u) => [u.id, u.email ?? null]));
+  const emailById = new Map(allUsers.map((u) => [u.id, u.email ?? null]));
 
   const entries: ActivityEntry[] = [
     ...(winesRes.data ?? []).map((w) => ({
@@ -89,19 +89,18 @@ async function folderSizeBytes(supabase: SupabaseClient, prefix: string): Promis
 }
 
 async function buildStorageUsage(supabase: SupabaseClient) {
-  const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 200 });
-  if (usersError) throw usersError;
+  const allUsers = await listAllUsers(supabase);
 
   const perUser: { userId: string; email: string | null; bytes: number }[] = [];
   let totalBytes = 0;
-  for (const u of usersData.users) {
+  for (const u of allUsers) {
     const bytes = await folderSizeBytes(supabase, u.id);
     totalBytes += bytes;
     perUser.push({ userId: u.id, email: u.email ?? null, bytes });
   }
 
   const totalQuotaBytes = TOTAL_QUOTA_MB * 1024 * 1024;
-  const avgPerUserBytes = usersData.users.length > 0 ? totalBytes / usersData.users.length : 0;
+  const avgPerUserBytes = allUsers.length > 0 ? totalBytes / allUsers.length : 0;
   const remainingBytes = Math.max(0, totalQuotaBytes - totalBytes);
   const estimatedAdditionalUsers = avgPerUserBytes > 0 ? Math.floor(remainingBytes / avgPerUserBytes) : null;
 

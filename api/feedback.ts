@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
-import { getSupabaseAdmin } from './_supabaseAdmin.js';
+import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface FeedbackRow {
@@ -21,9 +21,8 @@ async function listFeedback(supabase: SupabaseClient): Promise<FeedbackRow[]> {
   if (feedbackError) throw feedbackError;
   if (!feedback || feedback.length === 0) return [];
 
-  const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 200 });
-  if (usersError) throw usersError;
-  const emailById = new Map(usersData.users.map((u) => [u.id, u.email ?? null]));
+  const allUsers = await listAllUsers(supabase);
+  const emailById = new Map(allUsers.map((u) => [u.id, u.email ?? null]));
 
   const { data: replies, error: repliesError } = await supabase
     .from('feedback_replies')

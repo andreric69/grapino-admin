@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
-import { getSupabaseAdmin } from './_supabaseAdmin.js';
+import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Auftraege, Zahlungsanfragen und Preise zusammen in einer Datei - wegen
@@ -40,9 +40,8 @@ async function listOrders(supabase: SupabaseClient) {
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 200 });
-  if (usersError) throw usersError;
-  const emailById = new Map(usersData.users.map((u) => [u.id, u.email ?? null]));
+  const allUsers = await listAllUsers(supabase);
+  const emailById = new Map(allUsers.map((u) => [u.id, u.email ?? null]));
 
   const orders = data ?? [];
   const allWineIds = Array.from(new Set(orders.flatMap((o) => o.wine_ids as string[])));
@@ -75,9 +74,8 @@ async function listPaymentRequests(supabase: SupabaseClient) {
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 200 });
-  if (usersError) throw usersError;
-  const emailById = new Map(usersData.users.map((u) => [u.id, u.email ?? null]));
+  const allUsers = await listAllUsers(supabase);
+  const emailById = new Map(allUsers.map((u) => [u.id, u.email ?? null]));
 
   return (data ?? []).map((p) => ({ ...p, email: emailById.get(p.user_id) ?? null }));
 }
@@ -124,8 +122,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           reason?: string;
           orderId?: string | null;
         };
-        if (!userId || typeof amount !== 'number' || amount <= 0 || !reason?.trim()) {
-          res.status(400).json({ error: 'userId, amount (>0) und reason erforderlich.' });
+        if (
+          !userId ||
+          typeof amount !== 'number' ||
+          Number.isNaN(amount) ||
+          amount <= 0 ||
+          amount > 100_000 ||
+          !reason?.trim()
+        ) {
+          res.status(400).json({ error: 'userId, amount (0 - 100000) und reason erforderlich.' });
           return;
         }
         const { error } = await supabase
@@ -174,7 +179,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const update: Record<string, number> = {};
         for (const field of allowedFields) {
           const value = body[field];
-          if (typeof value === 'number' && !Number.isNaN(value) && value >= 0) update[field] = value;
+          if (value === undefined) continue;
+          // Ungueltige Werte werden nicht mehr still uebersprungen (sonst wirkt
+          // ein Speichern-Klick erfolgreich, obwohl ein Feld z. B. wegen eines
+          // Tippfehlers gar nicht uebernommen wurde) - stattdessen ein klarer
+          // Fehler, inkl. Obergrenze als Tippfehler-Schutz bei echten Preisen.
+          if (typeof value !== 'number' || Number.isNaN(value) || value < 0 || value > 10_000) {
+            res.status(400).json({ error: `${field}: ungueltiger Wert (0 - 10000 erwartet).` });
+            return;
+          }
+          update[field] = value;
         }
         if (Object.keys(update).length === 0) {
           res.status(400).json({ error: 'Mindestens ein gueltiges Preisfeld erforderlich.' });

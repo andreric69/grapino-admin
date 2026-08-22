@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
-import { getSupabaseAdmin } from './_supabaseAdmin.js';
+import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // "Deaktivieren" heisst: 10 Jahre gesperrt (Supabase kennt kein permanentes
@@ -31,8 +31,7 @@ interface UserAccessRow {
 }
 
 async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminUserRow[]> {
-  const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 200 });
-  if (usersError) throw usersError;
+  const allUsers = await listAllUsers(supabase);
 
   const [winesRes, accessRes] = await Promise.all([
     supabase.from('wines').select('user_id'),
@@ -47,7 +46,7 @@ async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminU
   }
   const accessByUser = new Map<string, UserAccessRow>((accessRes.data ?? []).map((a) => [a.user_id, a as UserAccessRow]));
 
-  return usersData.users
+  return allUsers
     .map((u) => {
       const access = accessByUser.get(u.id);
       return {

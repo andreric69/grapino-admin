@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
-import { getSupabaseAdmin } from './_supabaseAdmin.js';
+import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isAuthorized(req)) {
@@ -18,9 +18,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .order('created_at', { ascending: false });
       if (error) throw error;
 
-      const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 200 });
-      if (usersError) throw usersError;
-      const emailById = new Map(usersData.users.map((u) => [u.id, u.email ?? null]));
+      const users = await listAllUsers(supabase);
+      const emailById = new Map(users.map((u) => [u.id, u.email ?? null]));
 
       res.status(200).json({
         messages: (data ?? []).map((m) => ({ ...m, email: emailById.get(m.user_id) ?? null })),
