@@ -219,13 +219,18 @@ interface DataQualityFlag {
  *
  * Geprueft werden sowohl die eigenen Weine jedes Nutzers als auch der
  * geteilte wine_knowledge_cache (dort nur name_key, also kleingeschrieben,
- * da kein original-cased Name gespeichert wird).
+ * da kein original-cased Name gespeichert wird). Fuer den Cache wird
+ * "producer_key" statt "producer" geprueft: die richtig geschriebene
+ * "producer"-Spalte kam erst spaeter dazu und ist bei vielen aelteren
+ * Eintraegen leer, obwohl ein Produzent bekannt ist (das haette sonst 71
+ * Fehlalarme auf einmal erzeugt - live getestet). "producer_key" ist von
+ * Anfang an Pflichtfeld und immer verlaesslich.
  */
 async function buildDataQuality(supabase: SupabaseClient): Promise<{ flags: DataQualityFlag[] }> {
   const [allUsers, winesRes, cacheRes] = await Promise.all([
     listAllUsers(supabase),
     supabase.from('wines').select('id, user_id, name, producer, vintage'),
-    supabase.from('wine_knowledge_cache').select('name_key, producer, producer_key, vintage'),
+    supabase.from('wine_knowledge_cache').select('name_key, producer_key, vintage'),
   ]);
   if (winesRes.error) throw winesRes.error;
   if (cacheRes.error) throw cacheRes.error;
@@ -252,10 +257,10 @@ async function buildDataQuality(supabase: SupabaseClient): Promise<{ flags: Data
 
   for (const c of cacheRes.data ?? []) {
     const nameKey = (c.name_key as string | null) ?? '';
-    const producer = (c.producer as string | null)?.trim() || null;
+    const producerKey = (c.producer_key as string | null)?.trim() || null;
     if (!nameKey) continue;
-    if (!producer && looksLikeProducerName(nameKey)) {
-      flags.push({ source: 'wine_knowledge_cache', id: nameKey, name: nameKey, producer, vintage: c.vintage as number | null, email: null, reason: 'missing_producer_looks_like_name' });
+    if (!producerKey && looksLikeProducerName(nameKey)) {
+      flags.push({ source: 'wine_knowledge_cache', id: nameKey, name: nameKey, producer: null, vintage: c.vintage as number | null, email: null, reason: 'missing_producer_looks_like_name' });
     }
   }
 
