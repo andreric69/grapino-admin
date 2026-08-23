@@ -20,6 +20,8 @@ interface AdminUserRow {
   blockReason: string | null;
   blockAmount: number | null;
   trialEndsAt: string | null;
+  aiDailyLimit: number | null;
+  customAccessFee: number | null;
 }
 
 interface UserAccessRow {
@@ -28,6 +30,8 @@ interface UserAccessRow {
   block_reason: string | null;
   block_amount: number | null;
   trial_ends_at: string | null;
+  ai_daily_limit: number | null;
+  custom_access_fee: number | null;
 }
 
 async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminUserRow[]> {
@@ -35,7 +39,7 @@ async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminU
 
   const [winesRes, accessRes] = await Promise.all([
     supabase.from('wines').select('user_id'),
-    supabase.from('user_access').select('user_id, is_blocked, block_reason, block_amount, trial_ends_at'),
+    supabase.from('user_access').select('user_id, is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, custom_access_fee'),
   ]);
   if (winesRes.error) throw winesRes.error;
   if (accessRes.error) throw accessRes.error;
@@ -62,6 +66,8 @@ async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminU
         blockReason: access?.block_reason ?? null,
         blockAmount: access?.block_amount ?? null,
         trialEndsAt: access?.trial_ends_at ?? null,
+        aiDailyLimit: access?.ai_daily_limit ?? null,
+        customAccessFee: access?.custom_access_fee ?? null,
       };
     })
     .sort((a, b) => a.email?.localeCompare(b.email ?? '') ?? 0);
@@ -100,7 +106,7 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
       supabase.from('admin_user_notes').select('id, created_at, note').eq('user_id', userId).order('created_at', { ascending: false }),
       supabase
         .from('user_access')
-        .select('is_blocked, block_reason, block_amount, trial_ends_at')
+        .select('is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, custom_access_fee')
         .eq('user_id', userId)
         .maybeSingle(),
     ]);
@@ -131,6 +137,8 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
       blockReason: accessRes.data?.block_reason ?? null,
       blockAmount: accessRes.data?.block_amount ?? null,
       trialEndsAt: accessRes.data?.trial_ends_at ?? null,
+      aiDailyLimit: accessRes.data?.ai_daily_limit ?? null,
+      customAccessFee: accessRes.data?.custom_access_fee ?? null,
     },
     wineStats: {
       total: wines.length,
@@ -179,6 +187,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         blockReason?: string | null;
         blockAmount?: number | null;
         trialEndsAt?: string | null;
+        aiDailyLimit?: number | null;
+        customAccessFee?: number | null;
       };
 
       if (body.action === 'setAccess') {
@@ -186,6 +196,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(400).json({ error: 'userId erforderlich.' });
           return;
         }
+        // Tageslimit muss eine nicht-negative ganze Zahl sein (0 = KI-Erkennung
+        // fuer diesen Nutzer effektiv deaktiviert) - null bedeutet "globaler
+        // Standard", nicht "0 Scans erlaubt".
+        const aiDailyLimit =
+          typeof body.aiDailyLimit === 'number' && Number.isInteger(body.aiDailyLimit) && body.aiDailyLimit >= 0
+            ? body.aiDailyLimit
+            : null;
+        const customAccessFee =
+          typeof body.customAccessFee === 'number' && !Number.isNaN(body.customAccessFee) && body.customAccessFee >= 0
+            ? body.customAccessFee
+            : null;
         const { error } = await supabase.from('user_access').upsert(
           {
             user_id: body.userId,
@@ -193,6 +214,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             block_reason: body.blockReason?.trim() || null,
             block_amount: typeof body.blockAmount === 'number' && !Number.isNaN(body.blockAmount) ? body.blockAmount : null,
             trial_ends_at: body.trialEndsAt || null,
+            ai_daily_limit: aiDailyLimit,
+            custom_access_fee: customAccessFee,
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'user_id' },

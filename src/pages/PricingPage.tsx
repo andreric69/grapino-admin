@@ -17,10 +17,10 @@ interface PricingConfig {
 const FIELDS: { key: keyof Omit<PricingConfig, 'updated_at' | 'access_fee'>; label: string; hint: string }[] = [
   { key: 'trinkfenster_price', label: 'Nur Trinkfenster (CHF/Wein)', hint: '' },
   { key: 'name_price', label: 'Nur Name (CHF/Wein)', hint: '' },
-  { key: 'refresh_price', label: 'Refresh - alles aktualisieren (CHF/Wein)', hint: '' },
-  { key: 'neue_weine_price', label: 'Fuer neue Weine (CHF/Wein)', hint: '' },
-  { key: 'ultra_price', label: 'Ultra Import Paket (CHF/Wein)', hint: '' },
-  { key: 'minimum_price', label: 'Mindestbetrag pro Auftrag (CHF)', hint: 'Gilt fuer jede Kategorie, unabhaengig von der Flaschenzahl.' },
+  { key: 'neue_weine_price', label: 'Neue Weine, ohne Foto (CHF/Wein)', hint: 'Fuer per Foto hinzugefuegte Weine - Etikett ist schon da.' },
+  { key: 'refresh_price', label: 'Aktualisierung aller Weine (CHF/Wein)', hint: '' },
+  { key: 'ultra_price', label: 'Import-Aktualisierung, inkl. Foto (CHF/Wein)', hint: 'Fuer importierte Weine ohne Foto - deutlich aufwendiger, darf teurer sein.' },
+  { key: 'minimum_price', label: 'Mindestbetrag pro Auftrag (CHF)', hint: 'Gilt fuer jede Kategorie, unabhaengig von der Weinzahl.' },
 ];
 
 // Gleiche Formel wie computeOrderPrice() in der Weinapp (src/lib/pricingConfig.ts)
@@ -137,9 +137,10 @@ export function PricingPage() {
         {error && <p style={{ color: colors.danger, margin: 0, fontSize: 13 }}>{error}</p>}
       </div>
       <p style={{ fontSize: 12, opacity: 0.6 }}>
-        Die Weinapp rechnet damit progressiv (Quadratwurzel der Flaschenzahl statt linear) - der Preis oben gilt fuer 1
-        Flasche, bei grossen Mengen wird es automatisch guenstiger pro Flasche. Aenderungen wirken sofort fuer alle
-        neuen Auftraege.
+        Zaehlt die Anzahl unterschiedlicher Weine im Auftrag, nicht Flaschen (mehrere Flaschen desselben Weins zaehlen
+        als 1). Die Weinapp rechnet progressiv (Quadratwurzel der Weinzahl statt linear) - der Preis oben gilt fuer 1
+        Wein, bei grossen Mengen wird es automatisch guenstiger pro Wein. Aenderungen wirken sofort fuer alle neuen
+        Auftraege.
       </p>
 
       <div style={{ ...cardStyle, overflowX: 'auto' }}>

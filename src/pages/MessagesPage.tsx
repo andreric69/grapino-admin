@@ -1,22 +1,9 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
-import { cardStyle, colors, secondaryBtnStyle } from '../theme';
+import { colors } from '../theme';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
-
-interface UserMessage {
-  id: string;
-  created_at: string;
-  email: string | null;
-  category: 'allgemein' | 'vorschlag';
-  message: string;
-  read_at: string | null;
-}
-
-const CATEGORY_LABELS: Record<UserMessage['category'], string> = {
-  allgemein: 'Allgemein',
-  vorschlag: 'Aenderungsvorschlag',
-};
+import { MessageCard, type UserMessage } from '../components/MessageCard';
 
 export function MessagesPage() {
   const [messages, setMessages] = useState<UserMessage[] | null>(null);
@@ -62,19 +49,7 @@ export function MessagesPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {messages.map((m) => (
-        <div key={m.id} style={{ ...cardStyle, opacity: m.read_at ? 0.65 : 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 13 }}>
-            <strong>{m.email ?? 'Unbekannt'}</strong>
-            <span style={{ opacity: 0.6 }}>{new Date(m.created_at).toLocaleString('de-CH')}</span>
-          </div>
-          <div style={{ fontSize: 11.5, color: colors.accent, marginTop: 2 }}>{CATEGORY_LABELS[m.category]}</div>
-          <div style={{ fontSize: 14, marginTop: 6, whiteSpace: 'pre-wrap' }}>{m.message}</div>
-          {!m.read_at && (
-            <button type="button" disabled={busyId === m.id} onClick={() => markRead(m)} style={{ ...secondaryBtnStyle, marginTop: 10 }}>
-              Als gelesen markieren
-            </button>
-          )}
-        </div>
+        <MessageCard key={m.id} message={m} busy={busyId === m.id} onMarkRead={() => markRead(m)} />
       ))}
     </div>
   );

@@ -12,7 +12,14 @@ interface UserDetail {
     lastSignInAt: string | null;
     bannedUntil: string | null;
   };
-  access: { isBlocked: boolean; blockReason: string | null; blockAmount: number | null; trialEndsAt: string | null };
+  access: {
+    isBlocked: boolean;
+    blockReason: string | null;
+    blockAmount: number | null;
+    trialEndsAt: string | null;
+    aiDailyLimit: number | null;
+    customAccessFee: number | null;
+  };
   wineStats: { total: number; active: number; totalValue: number; withPrice: number };
   announcements: { id: string; created_at: string; title: string; type: string; target_user_id: string | null; seenAt: string | null }[];
   feedback: { id: string; created_at: string; rating: number }[];
@@ -36,6 +43,8 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [blockReason, setBlockReason] = useState('');
   const [blockAmount, setBlockAmount] = useState('');
   const [trialEndsAt, setTrialEndsAt] = useState('');
+  const [aiDailyLimit, setAiDailyLimit] = useState('');
+  const [customAccessFee, setCustomAccessFee] = useState('');
   const [savingAccess, setSavingAccess] = useState(false);
 
   async function load() {
@@ -50,6 +59,8 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     setBlockReason(data.access.blockReason ?? '');
     setBlockAmount(data.access.blockAmount !== null ? String(data.access.blockAmount) : '');
     setTrialEndsAt(data.access.trialEndsAt ?? '');
+    setAiDailyLimit(data.access.aiDailyLimit !== null ? String(data.access.aiDailyLimit) : '');
+    setCustomAccessFee(data.access.customAccessFee !== null ? String(data.access.customAccessFee) : '');
   }
 
   useEffect(() => {
@@ -71,6 +82,8 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           blockReason: blockReason.trim() || null,
           blockAmount: blockAmount.trim() ? parseFloat(blockAmount.replace(',', '.')) : null,
           trialEndsAt: trialEndsAt || null,
+          aiDailyLimit: aiDailyLimit.trim() ? parseInt(aiDailyLimit, 10) : null,
+          customAccessFee: customAccessFee.trim() ? parseFloat(customAccessFee.replace(',', '.')) : null,
         }),
       });
       if (!res.ok) throw new Error();
@@ -164,6 +177,30 @@ export function UserDetailPanel({ userId }: { userId: string }) {
               style={{ ...inputStyle, flex: 1 }}
             />
           </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ flex: 1 }}>
+              <input
+                type="number"
+                min={0}
+                value={aiDailyLimit}
+                onChange={(e) => setAiDailyLimit(e.target.value)}
+                placeholder="KI-Tageslimit (leer = Standard 100)"
+                style={{ ...inputStyle, width: '100%' }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <input
+                value={customAccessFee}
+                onChange={(e) => setCustomAccessFee(e.target.value)}
+                placeholder="Individuelle Zugangsgebuehr CHF (leer = Standard)"
+                style={{ ...inputStyle, width: '100%' }}
+              />
+            </div>
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.55 }}>
+            KI-Tageslimit: 0 deaktiviert die Etikett-Erkennung fuer diesen Nutzer komplett. Zugangsgebuehr ist rein
+            informativ (fuer Zahlungsanfragen) - wird nirgends automatisch durchgesetzt.
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {detail.access.isBlocked ? (
@@ -181,7 +218,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
             </button>
           )}
           <button type="button" disabled={savingAccess} onClick={() => saveAccess(detail.access.isBlocked)} style={secondaryBtnStyle}>
-            Nur Testabo-Datum speichern
+            Einstellungen speichern
           </button>
         </div>
       </div>

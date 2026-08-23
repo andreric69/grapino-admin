@@ -13,17 +13,17 @@ const PRICING_FIELDS =
 const CATEGORY_LABELS: Record<string, string> = {
   trinkfenster: 'Nur Trinkfenster',
   name: 'Nur Name',
-  refresh: 'Refresh (alles aktualisieren)',
-  neue_weine: 'Fuer neue Weine',
-  ultra: 'Ultra Import Paket',
+  refresh: 'Aktualisierung aller Weine',
+  neue_weine: 'Neue Weine (ohne Foto)',
+  ultra: 'Import-Aktualisierung (inkl. Foto)',
 };
 
 const CATEGORY_INSTRUCTIONS: Record<string, string> = {
   trinkfenster: 'Fuer die unten gelisteten Weine bitte AUSSCHLIESSLICH das Trinkfenster (drink_from/drink_to) recherchieren und eintragen. Sonst nichts aendern.',
   name: 'Fuer die unten gelisteten Weine bitte AUSSCHLIESSLICH Name/Bezeichnung pruefen und ggf. korrigieren. Sonst nichts aendern.',
   refresh: 'Fuer die unten gelisteten Weine bitte ALLE recherchierbaren Angaben aktualisieren (Region, Subregion, Rebsorte, Trinkfenster, Kritiker-Punkte, Food-Pairing etc).',
-  neue_weine: 'Die unten gelisteten Weine sind neu und haben kaum Angaben - bitte alle Basisdaten ergaenzen (Region, Rebsorte, Trinkfenster etc), wo recherchierbar.',
-  ultra: 'Fuer die unten gelisteten Weine bitte RUNDUM-SORGLOS-Recherche: Fotos (Etikett, klar erkennbar), Region/Subregion, Rebsorte, Trinkfenster, Kritiker-Punkte, Food-Pairing - alles Verfuegbare.',
+  neue_weine: 'Die unten gelisteten Weine wurden per Foto hinzugefuegt (Etikett-Foto ist also schon vorhanden) und haben sonst kaum Angaben - bitte alle Basisdaten ergaenzen (Region, Rebsorte, Trinkfenster etc), wo recherchierbar. KEIN Foto suchen/aendern.',
+  ultra: 'Fuer die unten gelisteten Weine (typischerweise aus einem CSV-Import ohne Fotos) bitte RUNDUM-SORGLOS-Recherche: Fotos (Etikett, klar erkennbar, exakt passender Jahrgang), Region/Subregion, Rebsorte, Trinkfenster, Kritiker-Punkte, Food-Pairing - alles Verfuegbare.',
 };
 
 interface WineRef {
