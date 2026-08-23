@@ -80,30 +80,39 @@ async function buildActivity(supabase: SupabaseClient): Promise<ActivityEntry[]>
   return entries.slice(0, 50);
 }
 
+// Nur die Primaerfoto-Datei liegt flach im Nutzer-Ordner
+// ({userId}/{wineId}.jpg) - Zusatzfotos landen je in einem eigenen
+// Unterordner ({userId}/{wineId}/...), siehe uploadWinePhotos() in der
+// Weinapp. Bei vielen Weinen mit Zusatzfotos (z. B. Gregors ~1500er
+// Sammlung) waeren das potenziell hunderte Unterordner - sequenziell
+// abgefragt (ein API-Aufruf nach dem anderen) drohte das bei so vielen
+// Nutzern/Ordnern den Vercel-Funktions-Timeout zu reissen. Parallel statt
+// nacheinander abgefragt, sowohl innerhalb eines Ordners als auch ueber alle
+// Nutzer hinweg.
 async function folderSizeBytes(supabase: SupabaseClient, prefix: string): Promise<number> {
   const { data, error } = await supabase.storage.from(BUCKET).list(prefix, { limit: 1000 });
   if (error) throw error;
-  let size = 0;
-  for (const entry of data ?? []) {
-    if (entry.id === null) {
-      size += await folderSizeBytes(supabase, `${prefix}/${entry.name}`);
-    } else {
-      size += (entry.metadata as { size?: number } | null)?.size ?? 0;
-    }
-  }
-  return size;
+  const sizes = await Promise.all(
+    (data ?? []).map((entry) =>
+      entry.id === null
+        ? folderSizeBytes(supabase, `${prefix}/${entry.name}`)
+        : Promise.resolve((entry.metadata as { size?: number } | null)?.size ?? 0),
+    ),
+  );
+  return sizes.reduce((sum, s) => sum + s, 0);
 }
 
 async function buildStorageUsage(supabase: SupabaseClient) {
   const allUsers = await listAllUsers(supabase);
 
-  const perUser: { userId: string; email: string | null; bytes: number }[] = [];
-  let totalBytes = 0;
-  for (const u of allUsers) {
-    const bytes = await folderSizeBytes(supabase, u.id);
-    totalBytes += bytes;
-    perUser.push({ userId: u.id, email: u.email ?? null, bytes });
-  }
+  const perUser = await Promise.all(
+    allUsers.map(async (u) => ({
+      userId: u.id,
+      email: u.email ?? null,
+      bytes: await folderSizeBytes(supabase, u.id),
+    })),
+  );
+  const totalBytes = perUser.reduce((sum, u) => sum + u.bytes, 0);
 
   const totalQuotaBytes = TOTAL_QUOTA_MB * 1024 * 1024;
   const avgPerUserBytes = allUsers.length > 0 ? totalBytes / allUsers.length : 0;

@@ -52,6 +52,14 @@ const KNOWLEDGE_FIELDS = [
  * Kurations-UI noetig. Ab dann sieht JEDER Nutzer, der denselben Wein
  * (Name+Produzent+Jahrgang) scannt, diese Angaben sofort, ohne dass fuer
  * ihn erneut recherchiert werden muss.
+ *
+ * Liest den bestehenden Cache-Eintrag zuerst und ergaenzt nur Felder, die
+ * DIESER Wein tatsaechlich hat - ueberschreibt nie mit null. Der Cache-
+ * Schluessel (Name+Produzent+Jahrgang) ist nutzerUEBERGREIFEND: besitzen
+ * zwei verschiedene Nutzer denselben Wein, wuerde ein einfaches Upsert des
+ * jeweils NUR TEILWEISE recherchierten Weins von Nutzer B sonst die bereits
+ * vollstaendig recherchierten Felder von Nutzer A stillschweigend mit null
+ * ueberschreiben.
  */
 async function syncWineKnowledgeCache(supabase: SupabaseClient, wineIds: string[]): Promise<void> {
   if (wineIds.length === 0) return;
@@ -61,35 +69,44 @@ async function syncWineKnowledgeCache(supabase: SupabaseClient, wineIds: string[
     .in('id', wineIds);
   if (error) throw error;
 
-  const rows = (wines ?? [])
-    .filter((w) => KNOWLEDGE_FIELDS.some((field) => (w as Record<string, unknown>)[field] !== null))
-    .map((w) => ({
-      name_key: w.name.trim().toLowerCase(),
-      producer_key: (w.producer ?? '').trim().toLowerCase(),
+  const candidates = (wines ?? []).filter((w) => KNOWLEDGE_FIELDS.some((field) => (w as Record<string, unknown>)[field] !== null));
+
+  for (const w of candidates) {
+    const name_key = w.name.trim().toLowerCase();
+    const producer_key = (w.producer ?? '').trim().toLowerCase();
+
+    let existingQuery = supabase.from('wine_knowledge_cache').select('*').eq('name_key', name_key).eq('producer_key', producer_key);
+    existingQuery = w.vintage === null ? existingQuery.is('vintage', null) : existingQuery.eq('vintage', w.vintage);
+    const { data: existing, error: existingError } = await existingQuery.maybeSingle();
+    if (existingError) throw existingError;
+
+    const merged = {
+      name_key,
+      producer_key,
       // Richtig geschriebene Form zusaetzlich zum Kleinschreib-Schluessel -
       // wird gebraucht, wenn ein spaeterer Scan denselben Wein nur ueber
       // Name+Jahrgang findet (kein Produzent auf dem Etikett erkennbar) und
       // den Produzenten selbst als Vorschlag uebernehmen will.
-      producer: w.producer,
+      producer: w.producer ?? existing?.producer ?? null,
       vintage: w.vintage,
-      grape_variety: w.grape_variety,
-      region: w.region,
-      subregion: w.subregion,
-      country: w.country,
-      wine_type: w.wine_type,
-      drink_from: w.drink_from,
-      drink_to: w.drink_to,
-      critic_scores: w.critic_scores,
-      food_pairing: w.food_pairing,
+      grape_variety: w.grape_variety ?? existing?.grape_variety ?? null,
+      region: w.region ?? existing?.region ?? null,
+      subregion: w.subregion ?? existing?.subregion ?? null,
+      country: w.country ?? existing?.country ?? null,
+      wine_type: w.wine_type ?? existing?.wine_type ?? null,
+      drink_from: w.drink_from ?? existing?.drink_from ?? null,
+      drink_to: w.drink_to ?? existing?.drink_to ?? null,
+      critic_scores: w.critic_scores ?? existing?.critic_scores ?? null,
+      food_pairing: w.food_pairing ?? existing?.food_pairing ?? null,
       source: 'admin_research',
       updated_at: new Date().toISOString(),
-    }));
-  if (rows.length === 0) return;
+    };
 
-  const { error: upsertError } = await supabase
-    .from('wine_knowledge_cache')
-    .upsert(rows, { onConflict: 'name_key,producer_key,vintage' });
-  if (upsertError) throw upsertError;
+    const { error: upsertError } = await supabase
+      .from('wine_knowledge_cache')
+      .upsert(merged, { onConflict: 'name_key,producer_key,vintage' });
+    if (upsertError) throw upsertError;
+  }
 }
 
 async function listOrders(supabase: SupabaseClient) {
