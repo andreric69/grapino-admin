@@ -7,20 +7,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // Vercels 12-Funktionen-Limit auf dem Hobby-Plan, ausgewaehlt via
 // ?resource=orders|payments|pricing.
 
-const PRICING_FIELDS =
-  'trinkfenster_price, name_price, refresh_price, neue_weine_price, ultra_price, minimum_price, access_fee, updated_at';
+const PRICING_FIELDS = 'refresh_price, neue_weine_price, ultra_price, minimum_price, access_fee, updated_at';
 
 const CATEGORY_LABELS: Record<string, string> = {
-  trinkfenster: 'Nur Trinkfenster',
-  name: 'Nur Name',
   refresh: 'Aktualisierung aller Weine',
   neue_weine: 'Neue Weine (ohne Foto)',
   ultra: 'Import-Aktualisierung (inkl. Foto)',
 };
 
 const CATEGORY_INSTRUCTIONS: Record<string, string> = {
-  trinkfenster: 'Fuer die unten gelisteten Weine bitte AUSSCHLIESSLICH das Trinkfenster (drink_from/drink_to) recherchieren und eintragen. Sonst nichts aendern.',
-  name: 'Fuer die unten gelisteten Weine bitte AUSSCHLIESSLICH Name/Bezeichnung pruefen und ggf. korrigieren. Sonst nichts aendern.',
   refresh: 'Fuer die unten gelisteten Weine bitte ALLE recherchierbaren Angaben aktualisieren (Region, Subregion, Rebsorte, Trinkfenster, Kritiker-Punkte, Food-Pairing etc).',
   neue_weine: 'Die unten gelisteten Weine wurden per Foto hinzugefuegt (Etikett-Foto ist also schon vorhanden) und haben sonst kaum Angaben - bitte alle Basisdaten ergaenzen (Region, Rebsorte, Trinkfenster etc), wo recherchierbar. KEIN Foto suchen/aendern.',
   ultra: 'Fuer die unten gelisteten Weine (typischerweise aus einem CSV-Import ohne Fotos) bitte RUNDUM-SORGLOS-Recherche: Fotos (Etikett, klar erkennbar, exakt passender Jahrgang), Region/Subregion, Rebsorte, Trinkfenster, Kritiker-Punkte, Food-Pairing - alles Verfuegbare.',
@@ -261,15 +256,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (req.method === 'PATCH') {
         const body = (req.body ?? {}) as Record<string, unknown>;
-        const allowedFields = [
-          'trinkfenster_price',
-          'name_price',
-          'refresh_price',
-          'neue_weine_price',
-          'ultra_price',
-          'minimum_price',
-          'access_fee',
-        ];
+        const allowedFields = ['refresh_price', 'neue_weine_price', 'ultra_price', 'minimum_price', 'access_fee'];
         const update: Record<string, number> = {};
         for (const field of allowedFields) {
           const value = body[field];

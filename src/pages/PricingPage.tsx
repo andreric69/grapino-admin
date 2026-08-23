@@ -4,8 +4,6 @@ import { cardStyle, colors, inputStyle, primaryBtnStyle } from '../theme';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 interface PricingConfig {
-  trinkfenster_price: number;
-  name_price: number;
   refresh_price: number;
   neue_weine_price: number;
   ultra_price: number;
@@ -15,8 +13,6 @@ interface PricingConfig {
 }
 
 const FIELDS: { key: keyof Omit<PricingConfig, 'updated_at' | 'access_fee'>; label: string; hint: string }[] = [
-  { key: 'trinkfenster_price', label: 'Nur Trinkfenster (CHF/Wein)', hint: '' },
-  { key: 'name_price', label: 'Nur Name (CHF/Wein)', hint: '' },
   { key: 'neue_weine_price', label: 'Neue Weine, ohne Foto (CHF/Wein)', hint: 'Fuer per Foto hinzugefuegte Weine - Etikett ist schon da.' },
   { key: 'refresh_price', label: 'Aktualisierung aller Weine (CHF/Wein)', hint: '' },
   { key: 'ultra_price', label: 'Import-Aktualisierung, inkl. Foto (CHF/Wein)', hint: 'Fuer importierte Weine ohne Foto - deutlich aufwendiger, darf teurer sein.' },
