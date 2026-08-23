@@ -104,6 +104,75 @@ async function syncWineKnowledgeCache(supabase: SupabaseClient, wineIds: string[
   }
 }
 
+interface KnowledgeRow {
+  grape_variety: string | null;
+  region: string | null;
+  subregion: string | null;
+  country: string | null;
+  wine_type: string | null;
+}
+
+const KNOWLEDGE_SELECT = 'grape_variety, region, subregion, country, wine_type';
+
+/** Wie agree() in der Weinapp (src/lib/wineKnowledgeCache.ts): liefert ein Feld nur, wenn sich ALLE Zeilen einig sind (ohne Gross-/Kleinschreibung), sonst null. */
+function agreeField(rows: KnowledgeRow[], key: keyof KnowledgeRow): string | null {
+  let result: string | null = null;
+  for (const row of rows) {
+    const value = row[key];
+    if (!value) continue;
+    if (result === null) result = value;
+    else if (result.trim().toLowerCase() !== value.trim().toLowerCase()) return null;
+  }
+  return result;
+}
+
+function summarizeKnowledge(rows: KnowledgeRow[]): string | null {
+  const grapeVariety = agreeField(rows, 'grape_variety');
+  const region = agreeField(rows, 'region');
+  const subregion = agreeField(rows, 'subregion');
+  const country = agreeField(rows, 'country');
+  const wineType = agreeField(rows, 'wine_type');
+
+  const parts = [
+    grapeVariety ? `Rebsorte ${grapeVariety}` : null,
+    region ? `Region ${region}${subregion ? ' / ' + subregion : ''}` : null,
+    country ? `Land ${country}` : null,
+    wineType ? `Typ ${wineType}` : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
+/**
+ * Fasst zusammen, was der geteilte wine_knowledge_cache zu einem Wein schon
+ * weiss - wird in listOrders() direkt in den Recherche-Prompt eingeblendet,
+ * damit fuer Aktualisierungs-/Import-Auftraege nicht jeder Wein bei null
+ * recherchiert werden muss, auch wenn schon ein anderer Nutzer denselben
+ * (oder namensgleichen) Wein hatte. Gleiche Ambiguitaets-Logik wie
+ * lookupWineKnowledge() in der Weinapp, hier nur als Info-Text statt als
+ * Formular-Vorschlag: erst Name+Produzent (ueber alle Jahrgaenge hinweg),
+ * sonst - falls kein Produzent bekannt ist - Name allein (ueber alle
+ * Produzenten/Jahrgaenge hinweg, nur wenn sich diese bei Herkunft/Rebsorte
+ * einig sind).
+ */
+async function lookupKnownWineHints(supabase: SupabaseClient, wine: WineRef): Promise<string | null> {
+  const nameKey = wine.name.trim().toLowerCase();
+  if (!nameKey) return null;
+  const producerKey = (wine.producer ?? '').trim().toLowerCase();
+
+  if (producerKey) {
+    const { data } = await supabase
+      .from('wine_knowledge_cache')
+      .select(KNOWLEDGE_SELECT)
+      .eq('name_key', nameKey)
+      .eq('producer_key', producerKey)
+      .limit(20);
+    return data && data.length > 0 ? summarizeKnowledge(data as KnowledgeRow[]) : null;
+  }
+
+  const { data } = await supabase.from('wine_knowledge_cache').select(KNOWLEDGE_SELECT).eq('name_key', nameKey).limit(50);
+  return data && data.length > 0 ? summarizeKnowledge(data as KnowledgeRow[]) : null;
+}
+
 async function listOrders(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('enrichment_orders')
@@ -123,19 +192,29 @@ async function listOrders(supabase: SupabaseClient) {
   if (winesError) throw winesError;
   const wineById = new Map<string, WineRef>((wines ?? []).map((w) => [w.id, w as WineRef]));
 
-  return orders.map((o) => {
-    const wineList = (o.wine_ids as string[]).map((id) => wineById.get(id)).filter((w): w is WineRef => w !== undefined);
-    const prompt = [
-      CATEGORY_INSTRUCTIONS[o.category],
-      o.note ? `Notiz vom Nutzer: ${o.note}` : null,
-      '',
-      'Weine:',
-      ...wineList.map((w) => `- ${w.name}${w.producer ? ' / ' + w.producer : ''}${w.vintage ? ' ' + w.vintage : ''} (id: ${w.id})`),
-    ]
-      .filter((line) => line !== null)
-      .join('\n');
-    return { ...o, email: emailById.get(o.user_id) ?? null, categoryLabel: CATEGORY_LABELS[o.category] ?? o.category, prompt };
-  });
+  return Promise.all(
+    orders.map(async (o) => {
+      const wineList = (o.wine_ids as string[]).map((id) => wineById.get(id)).filter((w): w is WineRef => w !== undefined);
+      // Hinweise nur fuer Auftraege berechnen, an denen tatsaechlich noch
+      // gearbeitet wird - erledigte/stornierte Auftraege brauchen sie nicht
+      // mehr, das spart bei wachsender Auftragshistorie unnoetige Abfragen.
+      const needsHints = o.status === 'pending' || o.status === 'in_progress';
+      const hints = needsHints ? await Promise.all(wineList.map((w) => lookupKnownWineHints(supabase, w))) : wineList.map(() => null);
+      const prompt = [
+        CATEGORY_INSTRUCTIONS[o.category],
+        o.note ? `Notiz vom Nutzer: ${o.note}` : null,
+        '',
+        'Weine:',
+        ...wineList.map((w, i) => {
+          const hint = hints[i];
+          return `- ${w.name}${w.producer ? ' / ' + w.producer : ''}${w.vintage ? ' ' + w.vintage : ''} (id: ${w.id})${hint ? ` | bereits bekannt: ${hint}` : ''}`;
+        }),
+      ]
+        .filter((line) => line !== null)
+        .join('\n');
+      return { ...o, email: emailById.get(o.user_id) ?? null, categoryLabel: CATEGORY_LABELS[o.category] ?? o.category, prompt };
+    }),
+  );
 }
 
 async function listPaymentRequests(supabase: SupabaseClient) {

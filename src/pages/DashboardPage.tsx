@@ -11,6 +11,7 @@ import { PaymentRequestsPage } from './PaymentRequestsPage';
 import { OrdersPage } from './OrdersPage';
 import { StoragePage } from './StoragePage';
 import { AiUsagePage } from './AiUsagePage';
+import { DataQualityPage } from './DataQualityPage';
 import { EmailTemplatesPage } from './EmailTemplatesPage';
 import { FinancesPage } from './FinancesPage';
 import { OverviewPage } from './OverviewPage';
@@ -28,7 +29,8 @@ type Tab =
   | 'email'
   | 'activity'
   | 'storage'
-  | 'aiUsage';
+  | 'aiUsage'
+  | 'dataQuality';
 
 const NAV: { key: Tab; label: string; icon: string }[] = [
   { key: 'overview', label: 'Uebersicht', icon: '\u{1F4CA}' },
@@ -44,6 +46,7 @@ const NAV: { key: Tab; label: string; icon: string }[] = [
   { key: 'activity', label: 'Aktivitaet', icon: '\u{1F4C8}' },
   { key: 'storage', label: 'Speicher', icon: '\u{1F5C3}\u{FE0F}' },
   { key: 'aiUsage', label: 'KI-Nutzung', icon: '\u{1F916}' },
+  { key: 'dataQuality', label: 'Datenqualitaet', icon: '\u{1F50E}' },
 ];
 
 const MOBILE_BREAKPOINT = '(max-width: 768px)';
@@ -217,6 +220,7 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === 'activity' && <ActivityPage />}
           {tab === 'storage' && <StoragePage />}
           {tab === 'aiUsage' && <AiUsagePage />}
+          {tab === 'dataQuality' && <DataQualityPage />}
         </div>
       </div>
     </div>

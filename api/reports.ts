@@ -3,9 +3,10 @@ import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// Aktivitaets-Feed, Kosten-/Einnahmen-Uebersicht, Speicher-Uebersicht und
-// KI-Nutzung zusammen in einer Datei - wegen Vercels 12-Funktionen-Limit auf
-// dem Hobby-Plan, ausgewaehlt via ?resource=activity|costs|income|storage|ai-usage.
+// Aktivitaets-Feed, Kosten-/Einnahmen-Uebersicht, Speicher-Uebersicht,
+// KI-Nutzung und Datenqualitaets-Check zusammen in einer Datei - wegen
+// Vercels 12-Funktionen-Limit auf dem Hobby-Plan, ausgewaehlt via
+// ?resource=activity|costs|income|storage|ai-usage|data-quality.
 
 const BUCKET = 'wine-photos';
 // Supabase-Speicherlimit fuer den aktuellen Plan (MB) - im Supabase-Dashboard
@@ -168,6 +169,99 @@ async function buildAiUsage(supabase: SupabaseClient) {
   };
 }
 
+const DIACRITICS_RANGE = /[̀-ͯ]/g;
+
+function stripDiacritics(s: string): string {
+  return s.normalize('NFD').replace(DIACRITICS_RANGE, '');
+}
+
+// Typische erste Woerter von Produzentennamen im Weinbau (mehrsprachig) -
+// steht so ein Wort am Anfang des NAME-Felds, sieht das eher nach einem
+// Produzenten aus, der versehentlich ins Namensfeld gerutscht ist.
+const PRODUCER_PREFIXES = new Set([
+  'chateau', 'domaine', 'weingut', 'weinguter', 'cantina', 'cantine', 'tenuta', 'bodega', 'bodegas',
+  'clos', 'podere', 'marchesi', 'casa', 'finca', 'quinta', 'schloss', 'winery', 'cellars', 'cellar',
+  'vignobles', 'azienda', 'fattoria', 'maison', 'cave', 'caves', 'vinicola', 'adega',
+  'kellerei', 'herrschaft', 'gebruder', 'famille',
+]);
+
+function looksLikeProducerName(name: string): boolean {
+  const firstWord = stripDiacritics(name.trim().toLowerCase()).split(/\s+/)[0] ?? '';
+  return PRODUCER_PREFIXES.has(firstWord);
+}
+
+interface DataQualityFlag {
+  source: 'wines' | 'wine_knowledge_cache';
+  id: string;
+  name: string;
+  producer: string | null;
+  vintage: number | null;
+  email: string | null;
+  reason: 'missing_producer_looks_like_name';
+}
+
+/**
+ * Rein lesende Heuristik-Pruefung - schlaegt NIE selbst etwas um, sondern
+ * listet nur Verdachtsfaelle auf, die von Hand geprueft werden sollten (siehe
+ * Standing-Regel: Name/Produzent/Region nie ohne gruendliche Verifikation
+ * aendern). Ein einziges Signal: Produzent-Feld leer, aber der Name faengt
+ * mit einem typischen Produzenten-Praefix an (Chateau/Domaine/Weingut/...) -
+ * deutet darauf hin, dass beim Import/Scan der Produzent versehentlich ins
+ * Namensfeld gerutscht ist.
+ *
+ * "Name === Produzent" wurde als zweites Signal bewusst verworfen, nachdem
+ * ein Test gegen die echten Produktivdaten gezeigt hat, dass es fast nur
+ * Fehlalarme produziert: bei sehr vielen hochwertigen Weinen (nicht nur
+ * klassischen Bordeaux-Chateaux, auch z.B. "Aalto", "Orma", "Cos
+ * d'Estournel") ist der Weinname absichtlich identisch mit dem Produzenten -
+ * das ist die korrekte, uebliche Namensgebung fuer ein "Flaggschiff"/
+ * Monopol-Gewaechs, kein Datenfehler.
+ *
+ * Geprueft werden sowohl die eigenen Weine jedes Nutzers als auch der
+ * geteilte wine_knowledge_cache (dort nur name_key, also kleingeschrieben,
+ * da kein original-cased Name gespeichert wird).
+ */
+async function buildDataQuality(supabase: SupabaseClient): Promise<{ flags: DataQualityFlag[] }> {
+  const [allUsers, winesRes, cacheRes] = await Promise.all([
+    listAllUsers(supabase),
+    supabase.from('wines').select('id, user_id, name, producer, vintage'),
+    supabase.from('wine_knowledge_cache').select('name_key, producer, producer_key, vintage'),
+  ]);
+  if (winesRes.error) throw winesRes.error;
+  if (cacheRes.error) throw cacheRes.error;
+
+  const emailById = new Map(allUsers.map((u) => [u.id, u.email ?? null]));
+  const flags: DataQualityFlag[] = [];
+
+  for (const w of winesRes.data ?? []) {
+    const name = (w.name as string | null) ?? '';
+    const producer = (w.producer as string | null)?.trim() || null;
+    if (!name.trim()) continue;
+    if (!producer && looksLikeProducerName(name)) {
+      flags.push({
+        source: 'wines',
+        id: w.id as string,
+        name,
+        producer,
+        vintage: w.vintage as number | null,
+        email: emailById.get(w.user_id as string) ?? null,
+        reason: 'missing_producer_looks_like_name',
+      });
+    }
+  }
+
+  for (const c of cacheRes.data ?? []) {
+    const nameKey = (c.name_key as string | null) ?? '';
+    const producer = (c.producer as string | null)?.trim() || null;
+    if (!nameKey) continue;
+    if (!producer && looksLikeProducerName(nameKey)) {
+      flags.push({ source: 'wine_knowledge_cache', id: nameKey, name: nameKey, producer, vintage: c.vintage as number | null, email: null, reason: 'missing_producer_looks_like_name' });
+    }
+  }
+
+  return { flags };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isAuthorized(req)) {
     res.status(401).json({ error: 'Nicht angemeldet.' });
@@ -277,6 +371,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    if (resource === 'data-quality') {
+      if (req.method !== 'GET') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+      }
+      res.status(200).json(await buildDataQuality(supabase));
+      return;
+    }
+
     if (resource === 'income') {
       if (req.method === 'GET') {
         const { data, error } = await supabase
@@ -345,7 +448,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    res.status(400).json({ error: 'resource ("activity"|"costs"|"income"|"storage"|"ai-usage") erforderlich.' });
+    res.status(400).json({ error: 'resource ("activity"|"costs"|"income"|"storage"|"ai-usage"|"data-quality") erforderlich.' });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
   }
