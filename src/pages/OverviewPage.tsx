@@ -4,6 +4,7 @@ import { cardStyle, colors, fontHeading, kickerStyle } from '../theme';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { OrderCard, type Order } from '../components/OrderCard';
 import { MessageCard, type UserMessage } from '../components/MessageCard';
+import { fetchFinancialSummary } from '../lib/financials';
 
 interface Metrics {
   userCount: number;
@@ -14,6 +15,7 @@ interface Metrics {
   paidThisMonthTotal: number;
   monthlyCosts: number;
   oneTimeCosts: number;
+  profitLoss: number;
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -66,12 +68,13 @@ export function OverviewPage() {
   async function load() {
     setError(null);
     try {
-      const [usersRes, paymentsRes, ordersRes, costsRes, messagesRes] = await Promise.all([
+      const [usersRes, paymentsRes, ordersRes, costsRes, messagesRes, financials] = await Promise.all([
         apiFetch('/api/users'),
         apiFetch('/api/commerce?resource=payments'),
         apiFetch('/api/commerce?resource=orders'),
         apiFetch('/api/reports?resource=costs'),
         apiFetch('/api/messages'),
+        fetchFinancialSummary(),
       ]);
       if (!usersRes.ok || !paymentsRes.ok || !ordersRes.ok || !costsRes.ok || !messagesRes.ok) throw new Error();
 
@@ -100,6 +103,7 @@ export function OverviewPage() {
         paidThisMonthTotal: paidThisMonth.reduce((s, p) => s + p.amount, 0),
         monthlyCosts: costs.filter((c) => c.recurrence === 'monatlich').reduce((s, c) => s + c.amount, 0),
         oneTimeCosts: costs.filter((c) => c.recurrence === 'einmalig').reduce((s, c) => s + c.amount, 0),
+        profitLoss: financials.profitLoss,
       });
       setOrders(ordersData);
       setMessages(messagesData);
@@ -156,6 +160,11 @@ export function OverviewPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+        <StatCard
+          label="Gewinn/Verlust"
+          value={`${metrics.profitLoss >= 0 ? '+' : ''}${metrics.profitLoss.toFixed(2)} CHF`}
+          sub="kumuliert, seit Start - Details in Finanzen"
+        />
         <StatCard label="Nutzer" value={String(metrics.userCount)} sub={`${metrics.blockedCount} blockiert · ${metrics.activeTrialCount} im Testabo`} />
         <StatCard label="Offene Zahlungen" value={`${metrics.openPaymentsTotal.toFixed(2)} CHF`} sub={`${metrics.openPaymentsCount} Anfragen`} />
         <StatCard label="Bezahlt diesen Monat" value={`${metrics.paidThisMonthTotal.toFixed(2)} CHF`} />

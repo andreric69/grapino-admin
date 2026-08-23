@@ -3,9 +3,9 @@ import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// Aktivitaets-Feed, Kosten-Uebersicht, Speicher-Uebersicht und KI-Nutzung
-// zusammen in einer Datei - wegen Vercels 12-Funktionen-Limit auf dem
-// Hobby-Plan, ausgewaehlt via ?resource=activity|costs|storage|ai-usage.
+// Aktivitaets-Feed, Kosten-/Einnahmen-Uebersicht, Speicher-Uebersicht und
+// KI-Nutzung zusammen in einer Datei - wegen Vercels 12-Funktionen-Limit auf
+// dem Hobby-Plan, ausgewaehlt via ?resource=activity|costs|income|storage|ai-usage.
 
 const BUCKET = 'wine-photos';
 // Supabase-Speicherlimit fuer den aktuellen Plan (MB) - im Supabase-Dashboard
@@ -277,7 +277,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    res.status(400).json({ error: 'resource ("activity"|"costs"|"storage"|"ai-usage") erforderlich.' });
+    if (resource === 'income') {
+      if (req.method === 'GET') {
+        const { data, error } = await supabase
+          .from('admin_income')
+          .select('id, created_at, label, amount, note')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        res.status(200).json({ income: data ?? [] });
+        return;
+      }
+      if (req.method === 'POST') {
+        const { label, amount, note } = (req.body ?? {}) as {
+          label?: string;
+          amount?: number;
+          note?: string;
+        };
+        if (!label?.trim() || typeof amount !== 'number' || Number.isNaN(amount)) {
+          res.status(400).json({ error: 'label und amount erforderlich.' });
+          return;
+        }
+        const { error } = await supabase.from('admin_income').insert({
+          label: label.trim(),
+          amount,
+          note: note?.trim() || null,
+        });
+        if (error) throw error;
+        res.status(200).json({ ok: true });
+        return;
+      }
+      if (req.method === 'PATCH') {
+        const { id, label, amount, note } = (req.body ?? {}) as {
+          id?: string;
+          label?: string;
+          amount?: number;
+          note?: string;
+        };
+        if (!id) {
+          res.status(400).json({ error: 'id erforderlich.' });
+          return;
+        }
+        const update: Record<string, unknown> = {};
+        if (label?.trim()) update.label = label.trim();
+        if (typeof amount === 'number' && !Number.isNaN(amount)) update.amount = amount;
+        if (note !== undefined) update.note = note?.trim() || null;
+        if (Object.keys(update).length === 0) {
+          res.status(400).json({ error: 'Keine Aenderung angegeben.' });
+          return;
+        }
+        const { error } = await supabase.from('admin_income').update(update).eq('id', id);
+        if (error) throw error;
+        res.status(200).json({ ok: true });
+        return;
+      }
+      if (req.method === 'DELETE') {
+        const { id } = (req.body ?? {}) as { id?: string };
+        if (!id) {
+          res.status(400).json({ error: 'id erforderlich.' });
+          return;
+        }
+        const { error } = await supabase.from('admin_income').delete().eq('id', id);
+        if (error) throw error;
+        res.status(200).json({ ok: true });
+        return;
+      }
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    res.status(400).json({ error: 'resource ("activity"|"costs"|"income"|"storage"|"ai-usage") erforderlich.' });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
   }

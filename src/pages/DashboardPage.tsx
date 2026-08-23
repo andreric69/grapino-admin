@@ -12,7 +12,7 @@ import { OrdersPage } from './OrdersPage';
 import { StoragePage } from './StoragePage';
 import { AiUsagePage } from './AiUsagePage';
 import { EmailTemplatesPage } from './EmailTemplatesPage';
-import { PricingAndCostsPage } from './PricingAndCostsPage';
+import { FinancesPage } from './FinancesPage';
 import { OverviewPage } from './OverviewPage';
 
 type Tab =
@@ -22,7 +22,7 @@ type Tab =
   | 'messages'
   | 'payments'
   | 'orders'
-  | 'pricingCosts'
+  | 'finances'
   | 'announcements'
   | 'feedback'
   | 'email'
@@ -37,7 +37,7 @@ const NAV: { key: Tab; label: string; icon: string }[] = [
   { key: 'messages', label: 'Nachrichten', icon: '\u{1F4AC}' },
   { key: 'payments', label: 'Zahlungen', icon: '\u{1F4B0}' },
   { key: 'orders', label: 'Auftraege', icon: '\u{1F4CB}' },
-  { key: 'pricingCosts', label: 'Preise & Kosten', icon: '\u{1F4B8}' },
+  { key: 'finances', label: 'Finanzen', icon: '\u{1F4B8}' },
   { key: 'announcements', label: 'Ankuendigungen', icon: '\u{1F4E3}' },
   { key: 'feedback', label: 'Feedback', icon: '\u{2B50}' },
   { key: 'email', label: 'E-Mail-Vorlagen', icon: '\u{2709}\u{FE0F}' },
@@ -210,7 +210,7 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === 'messages' && <MessagesPage />}
           {tab === 'payments' && <PaymentRequestsPage />}
           {tab === 'orders' && <OrdersPage />}
-          {tab === 'pricingCosts' && <PricingAndCostsPage />}
+          {tab === 'finances' && <FinancesPage />}
           {tab === 'announcements' && <AnnouncementsPage />}
           {tab === 'feedback' && <FeedbackPage />}
           {tab === 'email' && <EmailTemplatesPage />}
