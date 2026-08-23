@@ -17,16 +17,19 @@ interface Template {
 
 const TEMPLATES: Template[] = [
   {
-    key: 'einrichtung',
-    title: 'App-Einrichtung',
-    subject: 'Grapino - erste Schritte',
+    key: 'onboarding',
+    title: 'Onboarding',
+    subject: 'Willkommen bei Grapino',
     body: (name) =>
       `Hallo ${name}\n\n` +
       `Schoen, dass du Grapino nutzt! Kurz die wichtigsten Schritte:\n\n` +
-      `1. App auf dem Homescreen installieren: in Safari auf "Teilen" -> "Zum Home-Bildschirm" tippen.\n` +
-      `2. Wein hinzufuegen: unten rechts auf das Plus tippen, Etikett fotografieren - Name/Jahrgang werden automatisch vorgeschlagen.\n` +
-      `3. In den Einstellungen kannst du deinen Namen hinterlegen und die Sammlung sichern.\n\n` +
-      `Bei Fragen einfach ueber die Chat-Blase unten links melden.\n\nAndrin`,
+      `1. App auf dem Homescreen installieren: https://weinsammlung-two.vercel.app/ oeffnen, in Safari auf "Teilen" -> "Zum Home-Bildschirm" tippen.\n` +
+      `2. Mit deiner E-Mail-Adresse und deinem Passwort einloggen.\n` +
+      `3. Wein hinzufuegen: unten rechts auf das Plus tippen, Etikett fotografieren - Name, Produzent und Jahrgang werden automatisch erkannt.\n` +
+      `4. Hast du schon eine Sammlung (z. B. aus Vivino)? Laesst sich unter Einstellungen -> "CSV importieren" komplett uebernehmen - oder schick mir die Datei einfach zu, dann mach ich das fuer dich.\n\n` +
+      `Die ausfuehrliche Anleitung mit allen Details (Filter, Favoriten, Weine als getrunken markieren, Sicherung, ...) findest du hier zum Nachlesen:\n` +
+      `https://weinsammlung-two.vercel.app/Grapino-Anleitung.docx\n\n` +
+      `Bei Fragen einfach ueber die Chat-Blase unten links oder direkt bei mir melden.\n\nAndrin`,
   },
   {
     key: 'vivino',
