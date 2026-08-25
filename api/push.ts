@@ -33,7 +33,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(401).json({ error: 'Nicht autorisiert.' });
       return;
     }
-    const { user_id, category, message } = (req.body ?? {}) as { user_id?: string; category?: string; message?: string };
+    const { id, user_id, category, message } = (req.body ?? {}) as {
+      id?: string;
+      user_id?: string;
+      category?: string;
+      message?: string;
+    };
     try {
       const supabase = getSupabaseAdmin();
       let who = user_id ?? '';
@@ -43,6 +48,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const categoryLabel = category ? (CATEGORY_LABELS[category] ?? category) : '';
       await sendPush(supabase, 'admin', {
+        tag: id ? `grapino-message-${id}` : 'grapino-message',
+        type: 'show',
         title: 'Neue Nachricht',
         body: `${who}${categoryLabel ? ' - ' + categoryLabel : ''}: ${message ?? ''}`.trim(),
         url: '/',

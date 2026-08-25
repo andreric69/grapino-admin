@@ -7,17 +7,30 @@ declare const self: ServiceWorkerGlobalScope;
 self.__WB_MANIFEST;
 
 self.addEventListener('push', (event) => {
-  let data: { title?: string; body?: string; url?: string } = {};
+  let data: { tag?: string; type?: 'show' | 'close'; title?: string; body?: string; url?: string } = {};
   try {
     data = event.data?.json() ?? {};
   } catch {
     // kein JSON-Payload - leere Notification statt Absturz.
   }
+  const tag = data.tag || 'grapino-admin';
+
+  if (data.type === 'close') {
+    // Auf einem anderen Geraet (z. B. am Handy) bereits als gelesen markiert
+    // - die entsprechende Benachrichtigung hier still wieder wegnehmen,
+    // statt sie liegen zu lassen.
+    event.waitUntil(
+      self.registration.getNotifications({ tag }).then((existing) => existing.forEach((n) => n.close())),
+    );
+    return;
+  }
+
   event.waitUntil(
     self.registration.showNotification(data.title || 'Grapino Admin', {
       body: data.body || '',
       icon: '/icons/pwa-192x192.png',
       badge: '/icons/pwa-192x192.png',
+      tag,
       data: { url: data.url || '/' },
     }),
   );

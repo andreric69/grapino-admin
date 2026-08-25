@@ -1,41 +1,117 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
-import { cardStyle, inputStyle, primaryBtnStyle, secondaryBtnStyle } from '../theme';
+import { cardStyle, inputStyle, kickerStyle, primaryBtnStyle, secondaryBtnStyle } from '../theme';
 
 interface UserOption {
   id: string;
   email: string | null;
   displayName: string | null;
+  trialEndsAt: string | null;
+}
+interface PaymentRow {
+  id: string;
+  user_id: string;
+  amount: number;
+  reason: string;
+  status: 'open' | 'paid' | 'cancelled';
+}
+interface OrderRow {
+  id: string;
+  user_id: string;
+  categoryLabel: string;
+  wine_count: number;
+  status: 'pending' | 'in_progress' | 'done' | 'cancelled';
+  created_at: string;
+}
+
+interface TemplateContext {
+  name: string;
+  openPayment: PaymentRow | null;
+  lastDoneOrder: OrderRow | null;
+  trialEndsAt: string | null;
 }
 
 interface Template {
   key: string;
   title: string;
+  hint: string;
   subject: string;
-  body: (name: string) => string;
+  body: (ctx: TemplateContext) => string;
+}
+
+const APP_URL = 'https://weinsammlung-two.vercel.app';
+const ANLEITUNG_ONBOARDING = `${APP_URL}/Grapino-Anleitung.docx`;
+const ANLEITUNG_WEINE_ANLEGEN = `${APP_URL}/Grapino-Anleitung-Weine-Anlegen.pdf`;
+const ANLEITUNG_APP = `${APP_URL}/Grapino-Anleitung-App.pdf`;
+const ANLEITUNG_NACHRICHTEN = `${APP_URL}/Grapino-Anleitung-Nachrichten.pdf`;
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '[DATUM]';
+  return new Date(iso).toLocaleDateString('de-CH');
+}
+function formatAmount(n: number | undefined): string {
+  return n !== undefined ? n.toFixed(2) : '[BETRAG]';
 }
 
 const TEMPLATES: Template[] = [
   {
     key: 'onboarding',
     title: 'Onboarding',
+    hint: 'Erste Nachricht an einen neuen Nutzer.',
     subject: 'Willkommen bei Grapino',
-    body: (name) =>
+    body: ({ name }) =>
       `Hallo ${name}\n\n` +
       `Schoen, dass du Grapino nutzt! Kurz die wichtigsten Schritte:\n\n` +
-      `1. App auf dem Homescreen installieren: https://weinsammlung-two.vercel.app/ oeffnen, in Safari auf "Teilen" -> "Zum Home-Bildschirm" tippen.\n` +
+      `1. App auf dem Homescreen installieren: ${APP_URL}/ oeffnen, in Safari auf "Teilen" -> "Zum Home-Bildschirm" tippen.\n` +
       `2. Mit deiner E-Mail-Adresse und deinem Passwort einloggen.\n` +
       `3. Wein hinzufuegen: unten rechts auf das Plus tippen, Etikett fotografieren - Name, Produzent und Jahrgang werden automatisch erkannt.\n` +
       `4. Hast du schon eine Sammlung (z. B. aus Vivino)? Laesst sich unter Einstellungen -> "CSV importieren" komplett uebernehmen - oder schick mir die Datei einfach zu, dann mach ich das fuer dich.\n\n` +
-      `Die ausfuehrliche Anleitung mit allen Details (Filter, Favoriten, Weine als getrunken markieren, Sicherung, ...) findest du hier zum Nachlesen:\n` +
-      `https://weinsammlung-two.vercel.app/Grapino-Anleitung.docx\n\n` +
+      `Anleitungen zum Nachlesen:\n` +
+      `- Erste Schritte: ${ANLEITUNG_ONBOARDING}\n` +
+      `- Weine anlegen: ${ANLEITUNG_WEINE_ANLEGEN}\n` +
+      `- So funktioniert die App: ${ANLEITUNG_APP}\n` +
+      `- Kontakt und Nachrichten: ${ANLEITUNG_NACHRICHTEN}\n\n` +
       `Bei Fragen einfach ueber die Chat-Blase unten links oder direkt bei mir melden.\n\nAndrin`,
+  },
+  {
+    key: 'weine-anlegen',
+    title: 'Weine anlegen',
+    hint: 'Wenn jemand nicht weiss, wie er Weine erfasst.',
+    subject: 'Grapino - Weine anlegen',
+    body: ({ name }) =>
+      `Hallo ${name}\n\n` +
+      `Hier die kurze Anleitung, wie du neue Weine in Grapino anlegst - per Foto mit automatischer Erkennung, per Barcode-Scan oder von Hand:\n\n` +
+      `${ANLEITUNG_WEINE_ANLEGEN}\n\n` +
+      `Bei Fragen einfach melden.\n\nAndrin`,
+  },
+  {
+    key: 'app-bedienung',
+    title: 'So funktioniert die App',
+    hint: 'Allgemeine Bedienung - Suchen, Bearbeiten, als getrunken markieren, Statistik.',
+    subject: 'Grapino - So funktioniert die App',
+    body: ({ name }) =>
+      `Hallo ${name}\n\n` +
+      `Hier eine Anleitung zu den wichtigsten Funktionen von Grapino - Suchen/Filtern, einen Wein bearbeiten, als getrunken markieren, Favoriten, Wunschliste, Statistik und Datensicherung:\n\n` +
+      `${ANLEITUNG_APP}\n\n` +
+      `Bei Fragen einfach melden.\n\nAndrin`,
+  },
+  {
+    key: 'nachrichten',
+    title: 'Nachrichten-Funktion',
+    hint: 'Erklaert den Kontakt-Button und seine 4 Reiter.',
+    subject: 'Grapino - Kontakt und Nachrichten',
+    body: ({ name }) =>
+      `Hallo ${name}\n\n` +
+      `Kurz erklaert, wie du mich ueber die App erreichst und wie du Aktualisierungs-Auftraege gibst:\n\n` +
+      `${ANLEITUNG_NACHRICHTEN}\n\n` +
+      `Bei Fragen einfach melden.\n\nAndrin`,
   },
   {
     key: 'vivino',
     title: 'Vivino-Import',
+    hint: 'Bestehende Sammlung aus Vivino uebernehmen.',
     subject: 'Grapino - Sammlung aus Vivino importieren',
-    body: (name) =>
+    body: ({ name }) =>
       `Hallo ${name}\n\n` +
       `So bekommst du deine bestehende Vivino-Sammlung in Grapino:\n\n` +
       `1. In der Vivino-App: Profil -> Einstellungen -> "Weinkeller exportieren" (CSV).\n` +
@@ -46,19 +122,65 @@ const TEMPLATES: Template[] = [
   {
     key: 'backup',
     title: 'Sicherung erklaert',
+    hint: 'Hinweis auf die manuelle Datensicherung.',
     subject: 'Grapino - Sammlung sichern',
-    body: (name) =>
+    body: ({ name }) =>
       `Hallo ${name}\n\n` +
       `Kurzer Hinweis: unter Einstellungen -> "Sicherung herunterladen" kannst du jederzeit eine Kopie deiner ganzen Sammlung als Datei speichern. ` +
       `Praktisch vor grossen Aenderungen oder einfach ab und zu zwischendurch.\n\nAndrin`,
   },
+  {
+    key: 'zahlungserinnerung',
+    title: 'Zahlungserinnerung',
+    hint: 'Freundliche Erinnerung an eine offene Zahlung - Betrag wird automatisch eingesetzt, falls vorhanden.',
+    subject: 'Grapino - kurze Erinnerung',
+    body: ({ name, openPayment }) =>
+      `Hallo ${name}\n\n` +
+      `Kurze, freundliche Erinnerung: es steht noch eine offene Zahlung fuer Grapino aus - ` +
+      `${formatAmount(openPayment?.amount)} CHF${openPayment ? ` (${openPayment.reason})` : ''}.\n\n` +
+      `Details siehst du in der App unter Einstellungen -> "Kosten & Zahlungen". Keine Eile, ` +
+      `nur damit es nicht untergeht.\n\nAndrin`,
+  },
+  {
+    key: 'auftrag-erledigt',
+    title: 'Auftrag erledigt',
+    hint: 'Info, dass eine Aktualisierungs-Anfrage fertig ist - Details werden automatisch eingesetzt, falls vorhanden.',
+    subject: 'Grapino - dein Auftrag ist fertig',
+    body: ({ name, lastDoneOrder }) =>
+      `Hallo ${name}\n\n` +
+      `Dein Auftrag "${lastDoneOrder?.categoryLabel ?? '[AUFTRAG]'}" ` +
+      `(${lastDoneOrder ? lastDoneOrder.wine_count + ' Weine' : '[ANZAHL] Weine'}) ist fertig - ` +
+      `schau gern in der App vorbei, ob alles passt. Bei Rueckfragen einfach melden.\n\nAndrin`,
+  },
+  {
+    key: 'testphase-endet',
+    title: 'Testphase endet bald',
+    hint: 'Erinnerung kurz vor Ablauf des Testabos - Datum wird automatisch eingesetzt, falls vorhanden.',
+    subject: 'Grapino - deine Testphase laeuft bald aus',
+    body: ({ name, trialEndsAt }) =>
+      `Hallo ${name}\n\n` +
+      `Kurzer Hinweis: deine Testphase bei Grapino laeuft am ${formatDate(trialEndsAt)} aus. ` +
+      `Falls du weitermachen moechtest, sag einfach Bescheid, dann kuemmere ich mich um alles Weitere. ` +
+      `Bei Fragen zur Sammlung oder zur App gerne jederzeit melden.\n\nAndrin`,
+  },
+  {
+    key: 'wartung-stoerung',
+    title: 'Wartung / Stoerung',
+    hint: 'Kurze Info bei einer laufenden Stoerung oder geplanten Wartung.',
+    subject: 'Grapino - kurze Info',
+    body: ({ name }) =>
+      `Hallo ${name}\n\n` +
+      `Kurzer Hinweis: [Grapino ist gerade fuer eine kurze Wartung nicht erreichbar / es gab kurzzeitig ein Problem mit ...]. ` +
+      `Deine Daten sind davon nicht betroffen, alles bleibt gespeichert. ` +
+      `[Ich melde mich, sobald wieder alles laeuft. / Ist bereits behoben.]\n\n` +
+      `Sorry fuer die Umstaende - bei Fragen einfach melden.\n\nAndrin`,
+  },
 ];
 
-// Kein eigener E-Mail-Versand (kein Resend/Dienst noetig) - Text wird nur
-// vorbereitet, kopiert oder ans eigene Mail-Programm uebergeben. Versendet
-// wird von Andrin selbst aus seinem eigenen Postfach.
 export function EmailTemplatesPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
   const [targetUserId, setTargetUserId] = useState('');
   const [templateKey, setTemplateKey] = useState(TEMPLATES[0].key);
   const [subject, setSubject] = useState(TEMPLATES[0].subject);
@@ -67,20 +189,32 @@ export function EmailTemplatesPage() {
 
   useEffect(() => {
     apiFetch('/api/users').then(async (res) => {
-      if (res.ok) {
-        const data = (await res.json()) as { users: UserOption[] };
-        setUsers(data.users);
-      }
+      if (res.ok) setUsers(((await res.json()) as { users: UserOption[] }).users);
+    });
+    apiFetch('/api/commerce?resource=payments').then(async (res) => {
+      if (res.ok) setPayments(((await res.json()) as { paymentRequests: PaymentRow[] }).paymentRequests);
+    });
+    apiFetch('/api/commerce?resource=orders').then(async (res) => {
+      if (res.ok) setOrders(((await res.json()) as { orders: OrderRow[] }).orders);
     });
   }, []);
 
-  function applyTemplate(key: string, userId: string) {
-    const template = TEMPLATES.find((t) => t.key === key) ?? TEMPLATES[0];
+  const currentTemplate = useMemo(() => TEMPLATES.find((t) => t.key === templateKey) ?? TEMPLATES[0], [templateKey]);
+
+  function buildContext(userId: string): TemplateContext {
     const user = users.find((u) => u.id === userId);
     const name = user?.displayName || user?.email?.split('@')[0] || 'zusammen';
+    const openPayment = payments.find((p) => p.user_id === userId && p.status === 'open') ?? null;
+    const doneOrders = orders.filter((o) => o.user_id === userId && o.status === 'done');
+    const lastDoneOrder = doneOrders.length > 0 ? doneOrders[0] : null;
+    return { name, openPayment, lastDoneOrder, trialEndsAt: user?.trialEndsAt ?? null };
+  }
+
+  function applyTemplate(key: string, userId: string) {
+    const template = TEMPLATES.find((t) => t.key === key) ?? TEMPLATES[0];
     setTemplateKey(key);
     setSubject(template.subject);
-    setBody(template.body(name));
+    setBody(template.body(buildContext(userId)));
     setCopied(false);
   }
 
@@ -126,12 +260,13 @@ export function EmailTemplatesPage() {
             ))}
           </select>
         </div>
+        <div style={kickerStyle}>{currentTemplate.hint}</div>
 
         <input value={subject} onChange={(e) => setSubject(e.target.value)} style={inputStyle} placeholder="Betreff" />
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          rows={10}
+          rows={12}
           style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
         />
 
@@ -148,7 +283,8 @@ export function EmailTemplatesPage() {
         </div>
         <div style={{ fontSize: 11.5, opacity: 0.55 }}>
           Kein automatischer Versand - Text kopieren und selbst versenden, oder direkt im eigenen Mail-Programm
-          oeffnen (Empfaenger/Betreff/Text sind schon ausgefuellt).
+          oeffnen (Empfaenger/Betreff/Text sind schon ausgefuellt). Platzhalter in [ECKIGEN KLAMMERN] bitte vor dem
+          Senden pruefen/ausfuellen.
         </div>
       </div>
     </div>

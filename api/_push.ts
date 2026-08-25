@@ -2,9 +2,18 @@ import webpush from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface PushPayload {
-  title: string;
-  body: string;
-  url: string;
+  /** Eindeutiger Bezeichner dieser Benachrichtigung - identisch fuer die
+   * "zeigen"- und die spaetere "schliessen"-Nachricht desselben Ereignisses,
+   * damit ein Geraet die richtige Notification per getNotifications({tag})
+   * wiederfindet. */
+  tag: string;
+  /** 'close' schliesst eine zuvor gezeigte Benachrichtigung mit gleichem tag
+   * auf allen Geraeten wieder (z. B. sobald die Nachricht in der Admin-App
+   * als gelesen markiert wurde) - title/body werden dann ignoriert. */
+  type?: 'show' | 'close';
+  title?: string;
+  body?: string;
+  url?: string;
 }
 
 function vapidConfigured(): boolean {

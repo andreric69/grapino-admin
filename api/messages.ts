@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import { logError } from './_health.js';
+import { sendPush } from './_push.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isAuthorized(req)) {
@@ -36,6 +37,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const { error } = await supabase.from('user_messages').update({ read_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
+      // Nebeneffekt: schliesst die Push-Benachrichtigung dieser Nachricht auf
+      // allen Geraeten (Handy, iPad, ...), damit sie nicht liegen bleibt,
+      // nachdem sie hier bereits gelesen wurde.
+      await sendPush(supabase, 'admin', { tag: `grapino-message-${id}`, type: 'close' });
       res.status(200).json({ ok: true });
       return;
     }

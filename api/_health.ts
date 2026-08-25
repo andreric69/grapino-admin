@@ -33,7 +33,7 @@ export async function logError(supabase: SupabaseClient, endpoint: string, e: un
       .single();
 
     if (shouldNotify && inserted) {
-      await sendPush(supabase, 'admin', { title: 'Grapino Admin - Fehler', body: `${endpoint}: ${message}`, url: '/' });
+      await sendPush(supabase, 'admin', { tag: 'grapino-error', title: 'Grapino Admin - Fehler', body: `${endpoint}: ${message}`, url: '/' });
       await supabase.from('admin_error_log').update({ notified_at: new Date().toISOString() }).eq('id', inserted.id);
     }
   } catch {
