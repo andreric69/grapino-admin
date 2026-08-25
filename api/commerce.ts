@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logError } from './_health.js';
 
 // Auftraege, Zahlungsanfragen und Preise zusammen in einer Datei - wegen
 // Vercels 12-Funktionen-Limit auf dem Hobby-Plan, ausgewaehlt via
@@ -26,6 +27,7 @@ interface WineRef {
   name: string;
   producer: string | null;
   vintage: number | null;
+  notes: string | null;
 }
 
 const KNOWLEDGE_FIELDS = [
@@ -187,7 +189,7 @@ async function listOrders(supabase: SupabaseClient) {
   const allWineIds = Array.from(new Set(orders.flatMap((o) => o.wine_ids as string[])));
   const { data: wines, error: winesError } =
     allWineIds.length > 0
-      ? await supabase.from('wines').select('id, name, producer, vintage').in('id', allWineIds)
+      ? await supabase.from('wines').select('id, name, producer, vintage, notes').in('id', allWineIds)
       : { data: [], error: null };
   if (winesError) throw winesError;
   const wineById = new Map<string, WineRef>((wines ?? []).map((w) => [w.id, w as WineRef]));
@@ -207,7 +209,8 @@ async function listOrders(supabase: SupabaseClient) {
         'Weine:',
         ...wineList.map((w, i) => {
           const hint = hints[i];
-          return `- ${w.name}${w.producer ? ' / ' + w.producer : ''}${w.vintage ? ' ' + w.vintage : ''} (id: ${w.id})${hint ? ` | bereits bekannt: ${hint}` : ''}`;
+          const note = w.notes?.trim();
+          return `- ${w.name}${w.producer ? ' / ' + w.producer : ''}${w.vintage ? ' ' + w.vintage : ''} (id: ${w.id})${hint ? ` | bereits bekannt: ${hint}` : ''}${note ? ` | Notiz vom Nutzer zu diesem Wein: ${note}` : ''}`;
         }),
       ]
         .filter((line) => line !== null)
@@ -368,6 +371,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(400).json({ error: 'resource ("orders"|"payments"|"pricing") erforderlich.' });
   } catch (e) {
+    await logError(getSupabaseAdmin(), 'commerce', e);
     res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
   }
 }

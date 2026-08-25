@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logError } from './_health.js';
 
 // Aktivitaets-Feed, Kosten-/Einnahmen-Uebersicht, Speicher-Uebersicht,
 // KI-Nutzung und Datenqualitaets-Check zusammen in einer Datei - wegen
@@ -455,6 +456,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(400).json({ error: 'resource ("activity"|"costs"|"income"|"storage"|"ai-usage"|"data-quality") erforderlich.' });
   } catch (e) {
+    await logError(getSupabaseAdmin(), 'reports', e);
     res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
   }
 }

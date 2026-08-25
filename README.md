@@ -28,9 +28,12 @@ cp .env.example .env.local
 - `SESSION_SECRET` - langer Zufallstext (z. B. `openssl rand -hex 32`).
 - `SUPABASE_URL` - dieselbe Projekt-URL wie in der Haupt-Weinapp.
 - `SUPABASE_SERVICE_ROLE_KEY` - aus dem Supabase-Dashboard (Project Settings → API → `service_role` secret). **Niemals committen, niemals im Frontend verwenden.**
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` - Schlüsselpaar für Web-Push-Benachrichtigungen (Gesundheits-Seite), erzeugt via `web-push generate-vapid-keys` (oder `webpush.generateVAPIDKeys()`).
+- `VAPID_SUBJECT` - `mailto:`-Adresse, die Push-Diensten als Kontakt gemeldet wird.
+- `PUSH_WEBHOOK_SECRET` - beliebiger Zufallstext, muss identisch im Postgres-Trigger stehen, der `api/push?resource=notify-message` bei neuen Nachrichten aufruft (siehe `supabase/health-and-push-*.sql`, wird bewusst nicht committet, da es das Secret im Klartext enthält).
 
 Für lokales Testen inkl. der `/api`-Funktionen wird die Vercel-CLI benötigt (`vercel dev`), da reines `vite dev` die Serverless-Funktionen nicht ausführt. Alternativ: direkt nach Vercel deployen und dort testen (wie bei der Haupt-App).
 
 ## Deployment
 
-Wie bei der Haupt-Weinapp: GitHub-Repository verbinden, in Vercel als eigenes, separates Projekt importieren (Framework Preset: Vite), die vier Umgebungsvariablen oben eintragen, fertig - jeder Push deployt automatisch neu.
+Wie bei der Haupt-Weinapp: GitHub-Repository verbinden, in Vercel als eigenes, separates Projekt importieren (Framework Preset: Vite), die Umgebungsvariablen oben eintragen, fertig - jeder Push deployt automatisch neu.

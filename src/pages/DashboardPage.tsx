@@ -15,6 +15,7 @@ import { DataQualityPage } from './DataQualityPage';
 import { EmailTemplatesPage } from './EmailTemplatesPage';
 import { FinancesPage } from './FinancesPage';
 import { OverviewPage } from './OverviewPage';
+import { HealthPage } from './HealthPage';
 
 type Tab =
   | 'overview'
@@ -30,7 +31,8 @@ type Tab =
   | 'activity'
   | 'storage'
   | 'aiUsage'
-  | 'dataQuality';
+  | 'dataQuality'
+  | 'health';
 
 const NAV: { key: Tab; label: string; icon: string }[] = [
   { key: 'overview', label: 'Uebersicht', icon: '\u{1F4CA}' },
@@ -47,6 +49,7 @@ const NAV: { key: Tab; label: string; icon: string }[] = [
   { key: 'storage', label: 'Speicher', icon: '\u{1F5C3}\u{FE0F}' },
   { key: 'aiUsage', label: 'KI-Nutzung', icon: '\u{1F916}' },
   { key: 'dataQuality', label: 'Datenqualitaet', icon: '\u{1F50E}' },
+  { key: 'health', label: 'Gesundheit', icon: '\u{1FA7A}' },
 ];
 
 const MOBILE_BREAKPOINT = '(max-width: 768px)';
@@ -221,6 +224,7 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
           {tab === 'storage' && <StoragePage />}
           {tab === 'aiUsage' && <AiUsagePage />}
           {tab === 'dataQuality' && <DataQualityPage />}
+          {tab === 'health' && <HealthPage />}
         </div>
       </div>
     </div>
