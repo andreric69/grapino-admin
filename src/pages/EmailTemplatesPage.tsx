@@ -40,7 +40,7 @@ interface Template {
 }
 
 const APP_URL = 'https://weinsammlung-two.vercel.app';
-const ANLEITUNG_ONBOARDING = `${APP_URL}/Grapino-Anleitung.docx`;
+const ANLEITUNG_ONBOARDING = `${APP_URL}/Grapino-Anleitung.pdf`;
 const ANLEITUNG_WEINE_ANLEGEN = `${APP_URL}/Grapino-Anleitung-Weine-Anlegen.pdf`;
 const ANLEITUNG_APP = `${APP_URL}/Grapino-Anleitung-App.pdf`;
 const ANLEITUNG_NACHRICHTEN = `${APP_URL}/Grapino-Anleitung-Nachrichten.pdf`;
