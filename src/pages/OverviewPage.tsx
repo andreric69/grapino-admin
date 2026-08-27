@@ -8,7 +8,7 @@ import { MessageCard, type UserMessage } from '../components/MessageCard';
 import { fetchFinancialSummary } from '../lib/financials';
 
 /* Gleiche schlichte Linien-Icons wie auf der Statistik-Seite der Weinapp -
-   damit sich Kennzahlen-Kacheln in beiden Apps wiedererkennbar anfuehlen. */
+   damit sich Kennzahlen-Kacheln in beiden Apps wiedererkennbar anfühlen. */
 function iconProps(size: number) {
   return { width: size, height: size, viewBox: '0 0 24 24', fill: 'none' as const, stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
 }
@@ -237,7 +237,7 @@ export function OverviewPage() {
         <StatCard icon={<UsersIcon />} label="Nutzer" value={String(metrics.userCount)} sub={`${metrics.blockedCount} blockiert · ${metrics.activeTrialCount} im Testabo`} />
         <StatCard icon={<TagIcon />} label="Offene Zahlungen" value={`${metrics.openPaymentsTotal.toFixed(2)} CHF`} sub={`${metrics.openPaymentsCount} Anfragen`} />
         <StatCard icon={<CheckIcon />} label="Bezahlt diesen Monat" value={`${metrics.paidThisMonthTotal.toFixed(2)} CHF`} />
-        <StatCard icon={<BoxIcon />} label="Offene Auftraege" value={String(openOrders.length)} sub={`${openOrdersValue.toFixed(2)} CHF Volumen`} />
+        <StatCard icon={<BoxIcon />} label="Offene Aufträge" value={String(openOrders.length)} sub={`${openOrdersValue.toFixed(2)} CHF Volumen`} />
         <StatCard icon={<CalendarIcon />} label="Fixkosten / Monat" value={`${metrics.monthlyCosts.toFixed(2)} CHF`} />
         <StatCard icon={<ReceiptIcon />} label="Einmalige Kosten" value={`${metrics.oneTimeCosts.toFixed(2)} CHF`} />
       </div>
@@ -256,9 +256,9 @@ export function OverviewPage() {
       </div>
 
       <div>
-        <SectionHeading text="Offene Auftraege" count={openOrders.length} />
+        <SectionHeading text="Offene Aufträge" count={openOrders.length} />
         {openOrders.length === 0 ? (
-          <p style={{ fontSize: 13, opacity: 0.55, margin: 0 }}>Keine offenen Auftraege.</p>
+          <p style={{ fontSize: 13, opacity: 0.55, margin: 0 }}>Keine offenen Aufträge.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {openOrders.map((o) => (

@@ -50,7 +50,7 @@ export function AnnouncementsPage() {
     setError(null);
     const [annRes, usersRes] = await Promise.all([apiFetch('/api/announcements'), apiFetch('/api/users')]);
     if (!annRes.ok) {
-      setError('Ankuendigungen konnten nicht geladen werden.');
+      setError('Ankündigungen konnten nicht geladen werden.');
       return;
     }
     const data = (await annRes.json()) as { announcements: AnnouncementRow[] };
@@ -102,7 +102,7 @@ export function AnnouncementsPage() {
       setRepeatEveryDays('');
       await load();
     } catch {
-      setError('Ankuendigung konnte nicht erstellt werden.');
+      setError('Ankündigung konnte nicht erstellt werden.');
     } finally {
       setSending(false);
     }
@@ -126,7 +126,7 @@ export function AnnouncementsPage() {
   }
 
   async function handleDelete(a: Announcement) {
-    if (!window.confirm(`Ankuendigung "${a.title}" endgueltig loeschen?`)) return;
+    if (!window.confirm(`Ankündigung "${a.title}" endgültig löschen?`)) return;
     setBusyId(a.id);
     try {
       const res = await apiFetch('/api/announcements', {
@@ -137,7 +137,7 @@ export function AnnouncementsPage() {
       if (!res.ok) throw new Error();
       await load();
     } catch {
-      setError('Loeschen fehlgeschlagen.');
+      setError('Löschen fehlgeschlagen.');
     } finally {
       setBusyId(null);
     }
@@ -146,7 +146,7 @@ export function AnnouncementsPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ border: `1px solid ${colors.border}`, borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <strong style={{ fontSize: 14 }}>Neue Ankuendigung</strong>
+        <strong style={{ fontSize: 14 }}>Neue Ankündigung</strong>
         <input
           placeholder="Titel"
           value={title}
@@ -175,7 +175,7 @@ export function AnnouncementsPage() {
           <label style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
             Typ
             <select value={type} onChange={(e) => setType(e.target.value as 'news' | 'update')} style={{ padding: '5px 6px' }}>
-              <option value="news">Ankuendigung</option>
+              <option value="news">Ankündigung</option>
               <option value="update">Update</option>
             </select>
           </label>
@@ -197,13 +197,13 @@ export function AnnouncementsPage() {
           onClick={handleCreate}
           style={{ cursor: 'pointer', alignSelf: 'flex-start' }}
         >
-          {sending ? 'Wird gesendet ...' : 'Veroeffentlichen'}
+          {sending ? 'Wird gesendet ...' : 'Veröffentlichen'}
         </button>
       </div>
 
       {error && <p style={{ color: colors.danger }}>{error}</p>}
       {!announcements && <LoadingSpinner label="Wird geladen ..." />}
-      {announcements && announcements.length === 0 && <EmptyState icon="📣" text="Noch keine Ankuendigungen." />}
+      {announcements && announcements.length === 0 && <EmptyState icon="📣" text="Noch keine Ankündigungen." />}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {announcements?.map((a) => (
@@ -229,7 +229,7 @@ export function AnnouncementsPage() {
                 onClick={() => handleDelete(a)}
                 style={{ cursor: 'pointer', color: colors.danger }}
               >
-                Loeschen
+                Löschen
               </button>
             </div>
           </div>

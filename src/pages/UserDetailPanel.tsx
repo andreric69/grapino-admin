@@ -47,6 +47,10 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [customAccessFee, setCustomAccessFee] = useState('');
   const [savingAccess, setSavingAccess] = useState(false);
 
+  const [loginLink, setLoginLink] = useState<string | null>(null);
+  const [loadingLink, setLoadingLink] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
   async function load() {
     setError(null);
     const res = await apiFetch(`/api/users?userId=${encodeURIComponent(userId)}`);
@@ -92,6 +96,26 @@ export function UserDetailPanel({ userId }: { userId: string }) {
       setError('Zugangsstatus konnte nicht gespeichert werden.');
     } finally {
       setSavingAccess(false);
+    }
+  }
+
+  async function generateLoginLink() {
+    setLoadingLink(true);
+    setLinkCopied(false);
+    setError(null);
+    try {
+      const res = await apiFetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generateRecoveryLink', userId }),
+      });
+      if (!res.ok) throw new Error();
+      const data = (await res.json()) as { link: string };
+      setLoginLink(data.link);
+    } catch {
+      setError('Login-Link konnte nicht erzeugt werden.');
+    } finally {
+      setLoadingLink(false);
     }
   }
 
@@ -159,7 +183,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           <input
             value={blockReason}
             onChange={(e) => setBlockReason(e.target.value)}
-            placeholder="Grund (z. B. Zugangsgebuehr offen)"
+            placeholder="Grund (z. B. Zugangsgebühr offen)"
             style={inputStyle}
           />
           <div style={{ display: 'flex', gap: 6 }}>
@@ -192,14 +216,14 @@ export function UserDetailPanel({ userId }: { userId: string }) {
               <input
                 value={customAccessFee}
                 onChange={(e) => setCustomAccessFee(e.target.value)}
-                placeholder="Individuelle Zugangsgebuehr CHF (leer = Standard)"
+                placeholder="Individuelle Zugangsgebühr CHF (leer = Standard)"
                 style={{ ...inputStyle, width: '100%' }}
               />
             </div>
           </div>
           <div style={{ fontSize: 11, opacity: 0.55 }}>
-            KI-Tageslimit: 0 deaktiviert die Etikett-Erkennung fuer diesen Nutzer komplett. Zugangsgebuehr ist rein
-            informativ (fuer Zahlungsanfragen) - wird nirgends automatisch durchgesetzt.
+            KI-Tageslimit: 0 deaktiviert die Etikett-Erkennung für diesen Nutzer komplett. Zugangsgebühr ist rein
+            informativ (für Zahlungsanfragen) - wird nirgends automatisch durchgesetzt.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -223,8 +247,40 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         </div>
       </div>
 
+      <div style={cardStyle}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Login-Link</div>
+        <div style={{ fontSize: 11, opacity: 0.55, marginBottom: 8 }}>
+          Erzeugt einen einmaligen Anmelde-Link für diesen Nutzer (kein Passwort nötig). Per Mail verschicken, damit
+          sich der Nutzer erstmals anmelden und selbst ein Passwort setzen kann - oder selbst öffnen, um sich direkt
+          als dieser Nutzer einzuloggen und dessen Weine zu prüfen/ändern.
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: loginLink ? 8 : 0 }}>
+          <button type="button" disabled={loadingLink} onClick={generateLoginLink} style={secondaryBtnStyle}>
+            {loadingLink ? 'Wird erzeugt ...' : 'Login-Link generieren'}
+          </button>
+        </div>
+        {loginLink && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input readOnly value={loginLink} style={{ ...inputStyle, flex: 1, fontSize: 11 }} onFocus={(e) => e.target.select()} />
+            <button
+              type="button"
+              style={secondaryBtnStyle}
+              onClick={async () => {
+                await navigator.clipboard.writeText(loginLink);
+                setLinkCopied(true);
+              }}
+            >
+              {linkCopied ? 'Kopiert!' : 'Kopieren'}
+            </button>
+            <button type="button" style={secondaryBtnStyle} onClick={() => window.open(loginLink, '_blank')}>
+              Öffnen
+            </button>
+          </div>
+        )}
+      </div>
+
       <div>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>Ankuendigungen an diesen Nutzer</div>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>Ankündigungen an diesen Nutzer</div>
         {detail.announcements.length === 0 && <div style={{ opacity: 0.55 }}>Keine.</div>}
         {detail.announcements.map((a) => (
           <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
@@ -244,7 +300,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           ))}
         </div>
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Loeschanfragen ({detail.deletionRequests.length})</div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Löschanfragen ({detail.deletionRequests.length})</div>
           {detail.deletionRequests.map((d) => (
             <div key={d.id}>
               {d.status} - {formatDateTime(d.created_at)}
@@ -260,7 +316,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           ))}
         </div>
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Auftraege ({detail.orders.length})</div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Aufträge ({detail.orders.length})</div>
           {detail.orders.map((o) => (
             <div key={o.id}>
               {o.category} - {o.wine_count} Weine ({o.status})
@@ -281,7 +337,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           <input
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
-            placeholder="Notiz hinzufuegen ..."
+            placeholder="Notiz hinzufügen ..."
             style={{ ...inputStyle, flex: 1 }}
           />
           <button type="button" disabled={savingNote || !noteText.trim()} onClick={addNote} style={secondaryBtnStyle}>

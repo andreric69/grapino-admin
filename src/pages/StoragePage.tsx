@@ -44,12 +44,12 @@ export function StoragePage() {
         </div>
         <div style={{ fontSize: 12.5, opacity: 0.65, marginTop: 10 }}>
           {usage.estimatedAdditionalUsers !== null
-            ? `Bei aehnlichem Verbrauch pro Nutzer noch Platz fuer ca. ${usage.estimatedAdditionalUsers} weitere Nutzer.`
-            : 'Noch keine Fotos vorhanden - Hochrechnung noch nicht moeglich.'}
+            ? `Bei ähnlichem Verbrauch pro Nutzer noch Platz für ca. ${usage.estimatedAdditionalUsers} weitere Nutzer.`
+            : 'Noch keine Fotos vorhanden - Hochrechnung noch nicht möglich.'}
         </div>
         <div style={{ fontSize: 11, opacity: 0.5, marginTop: 6 }}>
           Limit manuell hinterlegt (Umgebungsvariable/Konstante) - im Supabase-Dashboard unter Settings → Billing →
-          Usage pruefen, falls sich der Plan geaendert hat.
+          Usage prüfen, falls sich der Plan geändert hat.
         </div>
       </div>
 

@@ -22,7 +22,7 @@ export function DeletionRequestsPage() {
     setError(null);
     const res = await apiFetch('/api/deletion-requests');
     if (!res.ok) {
-      setError('Loeschanfragen konnten nicht geladen werden.');
+      setError('Löschanfragen konnten nicht geladen werden.');
       return;
     }
     const body = (await res.json()) as { requests: DeletionRequest[] };
@@ -36,7 +36,7 @@ export function DeletionRequestsPage() {
   async function handle(request: DeletionRequest, action: 'approve' | 'reject') {
     const confirmMsg =
       action === 'approve'
-        ? `WIRKLICH loeschen? "${request.email ?? request.userId}" verliert unwiderruflich alle ${request.wineCount} Weine.`
+        ? `WIRKLICH löschen? "${request.email ?? request.userId}" verliert unwiderruflich alle ${request.wineCount} Weine.`
         : `Anfrage von "${request.email ?? request.userId}" ablehnen? Die Daten bleiben erhalten.`;
     if (!window.confirm(confirmMsg)) return;
 
@@ -58,14 +58,14 @@ export function DeletionRequestsPage() {
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!requests) return <LoadingSpinner label="Wird geladen ..." />;
-  if (requests.length === 0) return <EmptyState icon="🗑️" text="Keine offenen Loeschanfragen." />;
+  if (requests.length === 0) return <EmptyState icon="🗑️" text="Keine offenen Löschanfragen." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {requests.map((r) => (
         <div key={r.id} style={cardStyle}>
           <div>
-            <strong>{r.email ?? r.userId}</strong> moechte die gesamte Sammlung loeschen ({r.wineCount}{' '}
+            <strong>{r.email ?? r.userId}</strong> möchte die gesamte Sammlung löschen ({r.wineCount}{' '}
             {r.wineCount === 1 ? 'Wein' : 'Weine'})
           </div>
           <div style={{ opacity: 0.6, fontSize: 12, marginTop: 2 }}>
@@ -78,7 +78,7 @@ export function DeletionRequestsPage() {
               onClick={() => handle(r, 'approve')}
               style={{ ...secondaryBtnStyle, color: colors.danger, borderColor: colors.danger }}
             >
-              Bestaetigen &amp; loeschen
+              Bestätigen &amp; löschen
             </button>
             <button type="button" disabled={busyId === r.id} onClick={() => handle(r, 'reject')} style={secondaryBtnStyle}>
               Ablehnen

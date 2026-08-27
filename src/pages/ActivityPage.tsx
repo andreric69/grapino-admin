@@ -25,7 +25,7 @@ export function ActivityPage() {
   useEffect(() => {
     apiFetch('/api/reports?resource=activity').then(async (res) => {
       if (!res.ok) {
-        setError('Aktivitaet konnte nicht geladen werden.');
+        setError('Aktivität konnte nicht geladen werden.');
         return;
       }
       const data = (await res.json()) as { entries: ActivityEntry[] };
@@ -35,12 +35,12 @@ export function ActivityPage() {
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!entries) return <LoadingSpinner label="Wird geladen ..." />;
-  if (entries.length === 0) return <EmptyState icon="📈" text="Noch keine Aktivitaet." />;
+  if (entries.length === 0) return <EmptyState icon="📈" text="Noch keine Aktivität." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <p style={{ fontSize: 12, opacity: 0.6, marginTop: 0 }}>
-        Zeigt Wein-Eintraege, Trinkverlauf, Loeschanfragen und Feedback. Login-Historie wird nicht gespeichert -
+        Zeigt Wein-Einträge, Trinkverlauf, Löschanfragen und Feedback. Login-Historie wird nicht gespeichert -
         nur der letzte Login ist unter "Nutzer" sichtbar.
       </p>
       {entries.map((e, i) => (

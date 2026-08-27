@@ -14,7 +14,7 @@ export function OrdersPage() {
     setError(null);
     const res = await apiFetch('/api/commerce?resource=orders');
     if (!res.ok) {
-      setError('Auftraege konnten nicht geladen werden.');
+      setError('Aufträge konnten nicht geladen werden.');
       return;
     }
     const data = (await res.json()) as { orders: Order[] };
@@ -44,7 +44,7 @@ export function OrdersPage() {
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!orders) return <LoadingSpinner label="Wird geladen ..." />;
-  if (orders.length === 0) return <EmptyState icon="📋" text="Noch keine Auftraege." />;
+  if (orders.length === 0) return <EmptyState icon="📋" text="Noch keine Aufträge." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

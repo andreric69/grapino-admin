@@ -16,6 +16,7 @@ interface PaymentRequest {
 interface UserOption {
   id: string;
   email: string | null;
+  customAccessFee: number | null;
 }
 
 export function PaymentRequestsPage() {
@@ -28,10 +29,15 @@ export function PaymentRequestsPage() {
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [sending, setSending] = useState(false);
+  const [globalAccessFee, setGlobalAccessFee] = useState<number | null>(null);
 
   async function load() {
     setError(null);
-    const [reqRes, usersRes] = await Promise.all([apiFetch('/api/commerce?resource=payments'), apiFetch('/api/users')]);
+    const [reqRes, usersRes, pricingRes] = await Promise.all([
+      apiFetch('/api/commerce?resource=payments'),
+      apiFetch('/api/users'),
+      apiFetch('/api/commerce?resource=pricing'),
+    ]);
     if (!reqRes.ok) {
       setError('Zahlungsanfragen konnten nicht geladen werden.');
       return;
@@ -42,6 +48,17 @@ export function PaymentRequestsPage() {
       const usersData = (await usersRes.json()) as { users: UserOption[] };
       setUsers(usersData.users);
     }
+    if (pricingRes.ok) {
+      const pricingData = (await pricingRes.json()) as { pricing: { access_fee: number } };
+      setGlobalAccessFee(pricingData.pricing.access_fee);
+    }
+  }
+
+  function useAccessFeeReason() {
+    const user = users.find((u) => u.id === targetUserId);
+    const fee = user?.customAccessFee ?? globalAccessFee;
+    setReason('Zugangsgebühr');
+    if (fee !== null && fee !== undefined) setAmount(fee.toFixed(2));
   }
 
   useEffect(() => {
@@ -92,12 +109,12 @@ export function PaymentRequestsPage() {
       <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong style={{ fontSize: 14 }}>Neue Zahlungsanfrage</strong>
         <div style={{ fontSize: 12, opacity: 0.6 }}>
-          Rein informell - der Nutzer sieht das in der App, bezahlt aber ausserhalb (TWINT/Ueberweisung). Kein
+          Rein informell - der Nutzer sieht das in der App, bezahlt aber ausserhalb (TWINT/Überweisung). Kein
           echtes Bezahlsystem.
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <select value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 160 }}>
-            <option value="">Nutzer waehlen ...</option>
+            <option value="">Nutzer wählen ...</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.email ?? u.id}
@@ -106,7 +123,12 @@ export function PaymentRequestsPage() {
           </select>
           <input placeholder="Betrag CHF" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ ...inputStyle, width: 120 }} />
         </div>
-        <input placeholder="Grund" value={reason} onChange={(e) => setReason(e.target.value)} style={inputStyle} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input placeholder="Grund" value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+          <button type="button" disabled={!targetUserId} onClick={useAccessFeeReason} style={secondaryBtnStyle}>
+            Zugangsgebühr
+          </button>
+        </div>
         <button
           type="button"
           disabled={sending || !targetUserId || !amount.trim() || !reason.trim()}

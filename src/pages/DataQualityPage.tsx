@@ -38,7 +38,7 @@ export function DataQualityPage() {
   useEffect(() => {
     apiFetch('/api/reports?resource=data-quality').then(async (res) => {
       if (!res.ok) {
-        setError('Datenqualitaet konnte nicht geprueft werden.');
+        setError('Datenqualität konnte nicht geprüft werden.');
         return;
       }
       const data = (await res.json()) as { flags: DataQualityFlag[] };
@@ -47,7 +47,7 @@ export function DataQualityPage() {
   }, []);
 
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
-  if (!flags) return <LoadingSpinner label="Wird geprueft ..." />;
+  if (!flags) return <LoadingSpinner label="Wird geprüft ..." />;
 
   const wineFlags = flags.filter((f) => f.source === 'wines');
   const cacheFlags = flags.filter((f) => f.source === 'wine_knowledge_cache');
@@ -55,12 +55,12 @@ export function DataQualityPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <p style={{ fontSize: 12, opacity: 0.6, margin: 0 }}>
-        Automatische Verdachtsliste fuer moeglicherweise vertauschte Name/Produzent-Felder (z.B. aus einem
-        CSV-Import oder einer Etikett-Erkennung). Nur ein Hinweis zum Pruefen - hier wird nichts automatisch
-        geaendert.
+        Automatische Verdachtsliste für möglicherweise vertauschte Name/Produzent-Felder (z.B. aus einem
+        CSV-Import oder einer Etikett-Erkennung). Nur ein Hinweis zum Prüfen - hier wird nichts automatisch
+        geändert.
       </p>
 
-      {flags.length === 0 && <EmptyState icon="✅" text="Keine Verdachtsfaelle gefunden." />}
+      {flags.length === 0 && <EmptyState icon="✅" text="Keine Verdachtsfälle gefunden." />}
 
       {wineFlags.length > 0 && (
         <div>
@@ -88,7 +88,7 @@ export function DataQualityPage() {
             Geteilter Wissens-Cache ({cacheFlags.length})
           </h3>
           <p style={{ fontSize: 11.5, opacity: 0.55, margin: '0 0 8px' }}>
-            Name hier kleingeschrieben (technischer Schluessel, keine Original-Schreibweise gespeichert).
+            Name hier kleingeschrieben (technischer Schlüssel, keine Original-Schreibweise gespeichert).
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {cacheFlags.map((f) => (

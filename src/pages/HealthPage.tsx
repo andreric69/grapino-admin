@@ -131,7 +131,7 @@ export function HealthPage() {
       const keyRes = await apiFetch('/api/push?resource=vapid-public-key');
       if (!keyRes.ok) throw new Error();
       const { publicKey } = (await keyRes.json()) as { publicKey: string | null };
-      if (!publicKey) throw new Error('VAPID-Schluessel ist serverseitig noch nicht konfiguriert.');
+      if (!publicKey) throw new Error('VAPID-Schlüssel ist serverseitig noch nicht konfiguriert.');
 
       const reg = await navigator.serviceWorker.ready;
       const subscription = await reg.pushManager.subscribe({
@@ -164,7 +164,7 @@ export function HealthPage() {
             <StatusCard label="Weinapp" ping={health.weinapp} />
             <div style={cardStyle}>
               <div style={kickerStyle}>Push-Benachrichtigungen</div>
-              {pushState === 'unsupported' && <div style={{ marginTop: 6, fontSize: 13 }}>In diesem Browser nicht unterstuetzt.</div>}
+              {pushState === 'unsupported' && <div style={{ marginTop: 6, fontSize: 13 }}>In diesem Browser nicht unterstützt.</div>}
               {pushState === 'denied' && <div style={{ marginTop: 6, fontSize: 13, color: colors.danger }}>Berechtigung verweigert - im Browser manuell erlauben.</div>}
               {(pushState === 'off' || pushState === 'unknown') && (
                 <button type="button" style={{ ...primaryBtnStyle, marginTop: 6 }} onClick={enablePush}>

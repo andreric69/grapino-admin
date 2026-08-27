@@ -102,7 +102,7 @@ export function UsersPage() {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error ?? 'Anlegen fehlgeschlagen.');
       }
-      setCreateSuccess(`Konto fuer ${email} angelegt. Passwort dem Nutzer selbst mitteilen: ${newPassword}`);
+      setCreateSuccess(`Konto für ${email} angelegt. Passwort dem Nutzer selbst mitteilen: ${newPassword}`);
       setNewEmail('');
       setNewPassword('');
       setNewDisplayName('');
@@ -115,7 +115,7 @@ export function UsersPage() {
   }
 
   async function requestFeedback(user: AdminUser) {
-    if (!window.confirm(`Bei ${user.email ?? user.id} Feedback anfragen? Das Popup erscheint beim naechsten App-Start.`)) return;
+    if (!window.confirm(`Bei ${user.email ?? user.id} Feedback anfragen? Das Popup erscheint beim nächsten App-Start.`)) return;
     setRequestingFeedbackFor(user.id);
     try {
       const res = await apiFetch('/api/feedback?resource=requests', {
@@ -155,7 +155,7 @@ export function UsersPage() {
         {createError && <p style={{ color: colors.danger, margin: 0, fontSize: 13 }}>{createError}</p>}
         {createSuccess && <p style={{ color: colors.success, margin: 0, fontSize: 13 }}>{createSuccess}</p>}
         <p style={{ fontSize: 12, opacity: 0.6, margin: 0 }}>
-          Kein E-Mail-Versand fuer das Passwort - selbst an den Nutzer weitergeben (E-Mail-Vorlagen koennen fuer den
+          Kein E-Mail-Versand für das Passwort - selbst an den Nutzer weitergeben (E-Mail-Vorlagen können für den
           Rest helfen).
         </p>
       </div>

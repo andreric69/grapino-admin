@@ -35,20 +35,20 @@ type Tab =
   | 'health';
 
 const NAV: { key: Tab; label: string; icon: string }[] = [
-  { key: 'overview', label: 'Uebersicht', icon: '\u{1F4CA}' },
+  { key: 'overview', label: 'Übersicht', icon: '\u{1F4CA}' },
   { key: 'users', label: 'Nutzer', icon: '\u{1F464}' },
-  { key: 'deletions', label: 'Loeschanfragen', icon: '\u{1F5D1}\u{FE0F}' },
+  { key: 'deletions', label: 'Löschanfragen', icon: '\u{1F5D1}\u{FE0F}' },
   { key: 'messages', label: 'Nachrichten', icon: '\u{1F4AC}' },
   { key: 'payments', label: 'Zahlungen', icon: '\u{1F4B0}' },
-  { key: 'orders', label: 'Auftraege', icon: '\u{1F4CB}' },
+  { key: 'orders', label: 'Aufträge', icon: '\u{1F4CB}' },
   { key: 'finances', label: 'Finanzen', icon: '\u{1F4B8}' },
-  { key: 'announcements', label: 'Ankuendigungen', icon: '\u{1F4E3}' },
+  { key: 'announcements', label: 'Ankündigungen', icon: '\u{1F4E3}' },
   { key: 'feedback', label: 'Feedback', icon: '\u{2B50}' },
   { key: 'email', label: 'E-Mail-Vorlagen', icon: '\u{2709}\u{FE0F}' },
-  { key: 'activity', label: 'Aktivitaet', icon: '\u{1F4C8}' },
+  { key: 'activity', label: 'Aktivität', icon: '\u{1F4C8}' },
   { key: 'storage', label: 'Speicher', icon: '\u{1F5C3}\u{FE0F}' },
   { key: 'aiUsage', label: 'KI-Nutzung', icon: '\u{1F916}' },
-  { key: 'dataQuality', label: 'Datenqualitaet', icon: '\u{1F50E}' },
+  { key: 'dataQuality', label: 'Datenqualität', icon: '\u{1F50E}' },
   { key: 'health', label: 'Gesundheit', icon: '\u{1FA7A}' },
 ];
 
@@ -110,7 +110,7 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
         {isMobile && (
           <button
             type="button"
-            aria-label="Menue schliessen"
+            aria-label="Menü schliessen"
             onClick={() => setNavOpen(false)}
             style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: colors.textMuted, padding: 4 }}
           >
@@ -194,7 +194,7 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
           >
             <button
               type="button"
-              aria-label="Menue oeffnen"
+              aria-label="Menü öffnen"
               onClick={() => setNavOpen(true)}
               style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', padding: 4, color: colors.text }}
             >

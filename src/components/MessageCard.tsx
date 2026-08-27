@@ -11,7 +11,7 @@ export interface UserMessage {
 
 const CATEGORY_LABELS: Record<UserMessage['category'], string> = {
   allgemein: 'Allgemein',
-  vorschlag: 'Aenderungsvorschlag',
+  vorschlag: 'Änderungsvorschlag',
 };
 
 /** Eine Nachrichtenkarte - gemeinsam von MessagesPage und OverviewPage genutzt. */

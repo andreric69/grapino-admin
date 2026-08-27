@@ -54,15 +54,15 @@ export function AiUsagePage() {
         </div>
         <div>
           <div style={{ fontSize: 22, fontWeight: 600 }}>{formatChf(usage.estimatedTotalCostChf)}</div>
-          <div style={{ fontSize: 12, opacity: 0.6 }}>geschaetzte Kosten insgesamt</div>
+          <div style={{ fontSize: 12, opacity: 0.6 }}>geschätzte Kosten insgesamt</div>
         </div>
         <div>
           <div style={{ fontSize: 22, fontWeight: 600 }}>{formatChf(usage.estimatedCostPerScanChf)}</div>
-          <div style={{ fontSize: 12, opacity: 0.6 }}>geschaetzt pro Scan</div>
+          <div style={{ fontSize: 12, opacity: 0.6 }}>geschätzt pro Scan</div>
         </div>
       </div>
       <div style={{ fontSize: 11, opacity: 0.5 }}>
-        Grobe Schaetzung, keine exakte Abrechnung - echte Kosten im Anthropic Console-Dashboard pruefen. Tageslimit
+        Grobe Schätzung, keine exakte Abrechnung - echte Kosten im Anthropic Console-Dashboard prüfen. Tageslimit
         pro Nutzer: {usage.perUser[0]?.dailyLimit ?? 100} Scans (reines Sicherheitsnetz gegen einen Bug, siehe
         api/recognize-label.ts).
       </div>
@@ -101,7 +101,7 @@ export function AiUsagePage() {
                 </div>
                 <div style={{ textAlign: 'right', minWidth: 64 }}>
                   <div style={{ fontWeight: 600 }}>{formatChf(u.estimatedCostChf)}</div>
-                  <div style={{ fontSize: 10.5, opacity: 0.55 }}>geschaetzt</div>
+                  <div style={{ fontSize: 10.5, opacity: 0.55 }}>geschätzt</div>
                 </div>
               </div>
             </div>

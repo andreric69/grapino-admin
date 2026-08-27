@@ -48,7 +48,7 @@ export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
         />
         {error && <div style={{ color: colors.danger, fontSize: 13 }}>{error}</div>}
         <button type="submit" disabled={busy || !password} style={primaryBtnStyle}>
-          {busy ? 'Wird geprueft ...' : 'Anmelden'}
+          {busy ? 'Wird geprüft ...' : 'Anmelden'}
         </button>
       </form>
     </div>

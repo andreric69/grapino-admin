@@ -100,7 +100,7 @@ export function CostsPage() {
   }
 
   async function handleDelete(c: CostRow) {
-    if (!window.confirm(`Eintrag "${c.label}" loeschen?`)) return;
+    if (!window.confirm(`Eintrag "${c.label}" löschen?`)) return;
     setBusyId(c.id);
     try {
       const res = await apiFetch('/api/reports?resource=costs', {
@@ -111,7 +111,7 @@ export function CostsPage() {
       if (!res.ok) throw new Error();
       await load();
     } catch {
-      setError('Loeschen fehlgeschlagen.');
+      setError('Löschen fehlgeschlagen.');
     } finally {
       setBusyId(null);
     }
@@ -154,7 +154,7 @@ export function CostsPage() {
           onClick={handleAdd}
           style={{ cursor: 'pointer', alignSelf: 'flex-start' }}
         >
-          {sending ? 'Wird gespeichert ...' : 'Hinzufuegen'}
+          {sending ? 'Wird gespeichert ...' : 'Hinzufügen'}
         </button>
       </div>
 
@@ -206,7 +206,7 @@ export function CostsPage() {
                       onClick={() => handleDelete(c)}
                       style={{ cursor: 'pointer', color: colors.danger }}
                     >
-                      Loeschen
+                      Löschen
                     </button>
                   </div>
                 </div>

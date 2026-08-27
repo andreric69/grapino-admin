@@ -99,7 +99,7 @@ export function IncomePage() {
   }
 
   async function handleDelete(i: IncomeRow) {
-    if (!window.confirm(`Eintrag "${i.label}" loeschen?`)) return;
+    if (!window.confirm(`Eintrag "${i.label}" löschen?`)) return;
     setBusyId(i.id);
     try {
       const res = await apiFetch('/api/reports?resource=income', {
@@ -110,7 +110,7 @@ export function IncomePage() {
       if (!res.ok) throw new Error();
       await load();
     } catch {
-      setError('Loeschen fehlgeschlagen.');
+      setError('Löschen fehlgeschlagen.');
     } finally {
       setBusyId(null);
     }
@@ -121,9 +121,9 @@ export function IncomePage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <p style={{ fontSize: 12, opacity: 0.6, margin: 0 }}>
-        Nur fuer Einnahmen ausserhalb der App-Zahlungsanfragen (z.B. Bar oder Twint direkt erhalten). Bezahlte
-        Zahlungsanfragen (Zugangsgebuehren, Auftraege) zaehlen automatisch zur Gewinn/Verlust-Uebersicht dazu, ohne
-        hier eingetragen werden zu muessen.
+        Nur für Einnahmen ausserhalb der App-Zahlungsanfragen (z.B. Bar oder Twint direkt erhalten). Bezahlte
+        Zahlungsanfragen (Zugangsgebühren, Aufträge) zählen automatisch zur Gewinn/Verlust-Übersicht dazu, ohne
+        hier eingetragen werden zu müssen.
       </p>
       <div style={{ border: `1px solid ${colors.border}`, borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong style={{ fontSize: 14 }}>Neuer Einnahmen-Eintrag</strong>
@@ -153,7 +153,7 @@ export function IncomePage() {
           onClick={handleAdd}
           style={{ cursor: 'pointer', alignSelf: 'flex-start' }}
         >
-          {sending ? 'Wird gespeichert ...' : 'Hinzufuegen'}
+          {sending ? 'Wird gespeichert ...' : 'Hinzufügen'}
         </button>
       </div>
 
@@ -201,7 +201,7 @@ export function IncomePage() {
                         onClick={() => handleDelete(i)}
                         style={{ cursor: 'pointer', color: colors.danger }}
                       >
-                        Loeschen
+                        Löschen
                       </button>
                     </div>
                   </div>

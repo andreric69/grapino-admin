@@ -56,7 +56,7 @@ export function FeedbackPage() {
   }
 
   async function handleDelete(f: FeedbackRow) {
-    if (!window.confirm(`Feedback von ${f.email ?? 'Unbekannt'} unwiderruflich loeschen?`)) return;
+    if (!window.confirm(`Feedback von ${f.email ?? 'Unbekannt'} unwiderruflich löschen?`)) return;
     setDeletingId(f.id);
     try {
       const res = await apiFetch('/api/feedback', {
@@ -67,7 +67,7 @@ export function FeedbackPage() {
       if (!res.ok) throw new Error();
       await load();
     } catch {
-      setError('Loeschen fehlgeschlagen.');
+      setError('Löschen fehlgeschlagen.');
     } finally {
       setDeletingId(null);
     }
@@ -91,7 +91,7 @@ export function FeedbackPage() {
                 onClick={() => handleDelete(f)}
                 style={{ cursor: 'pointer', color: colors.danger, fontSize: 12.5, border: 'none', background: 'none' }}
               >
-                Loeschen
+                Löschen
               </button>
             </div>
           </div>

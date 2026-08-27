@@ -179,7 +179,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const body = (req.body ?? {}) as {
         userId?: string;
-        action?: 'ban' | 'unban' | 'create' | 'setDisplayName' | 'addNote' | 'setAccess';
+        action?: 'ban' | 'unban' | 'create' | 'setDisplayName' | 'addNote' | 'setAccess' | 'generateRecoveryLink';
         email?: string;
         password?: string;
         displayName?: string;
@@ -191,6 +191,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         aiDailyLimit?: number | null;
         customAccessFee?: number | null;
       };
+
+      if (body.action === 'generateRecoveryLink') {
+        if (!body.userId) {
+          res.status(400).json({ error: 'userId erforderlich.' });
+          return;
+        }
+        const { data: userData, error: userError } = await supabase.auth.admin.getUserById(body.userId);
+        if (userError) throw userError;
+        const email = userData.user?.email;
+        if (!email) {
+          res.status(400).json({ error: 'Nutzer hat keine E-Mail-Adresse.' });
+          return;
+        }
+        const { data, error } = await supabase.auth.admin.generateLink({
+          type: 'recovery',
+          email,
+          options: { redirectTo: 'https://weinsammlung-two.vercel.app/' },
+        });
+        if (error) throw error;
+        res.status(200).json({ link: data.properties.action_link });
+        return;
+      }
 
       if (body.action === 'setAccess') {
         if (!body.userId) {

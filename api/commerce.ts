@@ -8,7 +8,8 @@ import { logError } from './_health.js';
 // Vercels 12-Funktionen-Limit auf dem Hobby-Plan, ausgewaehlt via
 // ?resource=orders|payments|pricing.
 
-const PRICING_FIELDS = 'refresh_price, neue_weine_price, ultra_price, minimum_price, access_fee, updated_at';
+const PRICING_FIELDS =
+  'refresh_price, neue_weine_price, ultra_price, standard_min_price, standard_max_price, ultra_min_price, ultra_max_price, access_fee, updated_at';
 
 const CATEGORY_LABELS: Record<string, string> = {
   refresh: 'Aktualisierung aller Weine',
@@ -338,7 +339,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (req.method === 'PATCH') {
         const body = (req.body ?? {}) as Record<string, unknown>;
-        const allowedFields = ['refresh_price', 'neue_weine_price', 'ultra_price', 'minimum_price', 'access_fee'];
+        const allowedFields = [
+          'refresh_price',
+          'neue_weine_price',
+          'ultra_price',
+          'standard_min_price',
+          'standard_max_price',
+          'ultra_min_price',
+          'ultra_max_price',
+          'access_fee',
+        ];
         const update: Record<string, number> = {};
         for (const field of allowedFields) {
           const value = body[field];
