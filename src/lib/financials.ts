@@ -18,20 +18,19 @@ export interface FinancialSummary {
  * "CHF/Monat laufend" angezeigt, damit trotzdem sichtbar ist, was regelmaessig
  * abgeht.
  */
-export async function fetchFinancialSummary(): Promise<FinancialSummary> {
-  const [paymentsRes, incomeRes, costsRes] = await Promise.all([
-    apiFetch('/api/commerce?resource=payments'),
-    apiFetch('/api/reports?resource=income'),
-    apiFetch('/api/reports?resource=costs'),
-  ]);
-  if (!paymentsRes.ok || !incomeRes.ok || !costsRes.ok) {
-    throw new Error('Finanz-Kennzahlen konnten nicht geladen werden.');
-  }
-
-  const payments = ((await paymentsRes.json()) as { paymentRequests: { amount: number; status: string }[] }).paymentRequests;
-  const income = ((await incomeRes.json()) as { income: { amount: number }[] }).income;
-  const costs = ((await costsRes.json()) as { costs: { amount: number; recurrence: string }[] }).costs;
-
+/**
+ * Reine Berechnung, getrennt von fetchFinancialSummary() ausgelagert - so
+ * kann das Dashboard (OverviewPage) dieselben Zahlen berechnen, ohne
+ * payments/costs ein zweites Mal parallel abzufragen (siehe dortiger
+ * Kommentar: acht statt sechs gleichzeitige Anfragen pro Dashboard-Aufruf
+ * erhoehten unnoetig die Chance, dass ein einzelner Netzwerk-Aussetzer den
+ * ganzen Dashboard-Ladevorgang scheitern liess).
+ */
+export function computeFinancialSummary(
+  payments: { amount: number; status: string }[],
+  income: { amount: number }[],
+  costs: { amount: number; recurrence: string }[],
+): FinancialSummary {
   const paidPaymentsTotal = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
   const manualIncomeTotal = income.reduce((s, i) => s + i.amount, 0);
   const oneTimeCostsTotal = costs.filter((c) => c.recurrence === 'einmalig').reduce((s, c) => s + c.amount, 0);
@@ -46,4 +45,21 @@ export async function fetchFinancialSummary(): Promise<FinancialSummary> {
     monthlyCostsTotal,
     profitLoss: incomeTotal - oneTimeCostsTotal,
   };
+}
+
+export async function fetchFinancialSummary(): Promise<FinancialSummary> {
+  const [paymentsRes, incomeRes, costsRes] = await Promise.all([
+    apiFetch('/api/commerce?resource=payments'),
+    apiFetch('/api/reports?resource=income'),
+    apiFetch('/api/reports?resource=costs'),
+  ]);
+  if (!paymentsRes.ok || !incomeRes.ok || !costsRes.ok) {
+    throw new Error('Finanz-Kennzahlen konnten nicht geladen werden.');
+  }
+
+  const payments = ((await paymentsRes.json()) as { paymentRequests: { amount: number; status: string }[] }).paymentRequests;
+  const income = ((await incomeRes.json()) as { income: { amount: number }[] }).income;
+  const costs = ((await costsRes.json()) as { costs: { amount: number; recurrence: string }[] }).costs;
+
+  return computeFinancialSummary(payments, income, costs);
 }

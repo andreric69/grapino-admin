@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
-import { logError } from './_health.js';
+import { logError, errorMessage } from './_health.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isAuthorized(req)) {
@@ -81,6 +81,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(405).json({ error: 'Method not allowed' });
   } catch (e) {
     await logError(getSupabaseAdmin(), 'announcements', e);
-    res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
+    res.status(500).json({ error: errorMessage(e) });
   }
 }

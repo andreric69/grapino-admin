@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { apiFetch } from '../lib/apiClient';
-import { cardStyle, colors, fontHeading, kickerStyle } from '../theme';
+import { cardStyle, colors, fontHeading, kickerStyle, primaryBtnStyle } from '../theme';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { OrderCard, type Order } from '../components/OrderCard';
 import { MessageCard, type UserMessage } from '../components/MessageCard';
-import { fetchFinancialSummary } from '../lib/financials';
+import { computeFinancialSummary } from '../lib/financials';
 
 /* Gleiche schlichte Linien-Icons wie auf der Statistik-Seite der Weinapp -
    damit sich Kennzahlen-Kacheln in beiden Apps wiedererkennbar anfühlen. */
@@ -135,15 +135,37 @@ export function OverviewPage() {
   async function load() {
     setError(null);
     try {
-      const [usersRes, paymentsRes, ordersRes, costsRes, messagesRes, financials] = await Promise.all([
+      // Jede Ressource nur EIN Mal parallel abfragen (vorher acht statt sechs
+      // gleichzeitige Anfragen, weil fetchFinancialSummary() payments/costs
+      // ein zweites Mal separat holte) - weniger gleichzeitige Anfragen
+      // senken die Chance, dass ein einzelner transienter Netzwerkfehler
+      // zwischen Vercel und Supabase den ganzen Dashboard-Ladevorgang reisst.
+      const [usersRes, paymentsRes, ordersRes, costsRes, messagesRes, incomeRes] = await Promise.all([
         apiFetch('/api/users'),
         apiFetch('/api/commerce?resource=payments'),
         apiFetch('/api/commerce?resource=orders'),
         apiFetch('/api/reports?resource=costs'),
         apiFetch('/api/messages'),
-        fetchFinancialSummary(),
+        apiFetch('/api/reports?resource=income'),
       ]);
-      if (!usersRes.ok || !paymentsRes.ok || !ordersRes.ok || !costsRes.ok || !messagesRes.ok) throw new Error();
+      for (const [label, res] of [
+        ['Nutzer', usersRes],
+        ['Zahlungen', paymentsRes],
+        ['Aufträge', ordersRes],
+        ['Kosten', costsRes],
+        ['Nachrichten', messagesRes],
+        ['Einnahmen', incomeRes],
+      ] as const) {
+        if (!res.ok) {
+          let detail = '';
+          try {
+            detail = ((await res.json()) as { error?: string }).error ?? '';
+          } catch {
+            // Antwort war kein JSON - Detail bleibt leer, Fallback-Text unten reicht.
+          }
+          throw new Error(`${label} konnten nicht geladen werden${detail ? ` (${detail})` : ''}.`);
+        }
+      }
 
       const users = (
         (await usersRes.json()) as { users: { isBlocked: boolean; trialEndsAt: string | null }[] }
@@ -154,12 +176,14 @@ export function OverviewPage() {
       const ordersData = ((await ordersRes.json()) as { orders: Order[] }).orders;
       const costs = ((await costsRes.json()) as { costs: { amount: number; recurrence: string }[] }).costs;
       const messagesData = ((await messagesRes.json()) as { messages: UserMessage[] }).messages;
+      const income = ((await incomeRes.json()) as { income: { amount: number }[] }).income;
 
       const today = new Date();
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
       const openPayments = payments.filter((p) => p.status === 'open');
       const paidThisMonth = payments.filter((p) => p.status === 'paid' && p.paid_at && new Date(p.paid_at) >= startOfMonth);
+      const financials = computeFinancialSummary(payments, income, costs);
 
       setMetrics({
         userCount: users.length,
@@ -174,8 +198,11 @@ export function OverviewPage() {
       });
       setOrders(ordersData);
       setMessages(messagesData);
-    } catch {
-      setError('Kennzahlen konnten nicht geladen werden.');
+    } catch (e) {
+      // Konkrete Meldung statt nur "Kennzahlen konnten nicht geladen werden" -
+      // meist ein voruebergehender Netzwerk-Aussetzer (siehe Retry-Button
+      // unten), da hilft zu wissen, welche Ressource betroffen war.
+      setError(e instanceof Error ? e.message : 'Kennzahlen konnten nicht geladen werden.');
     }
   }
 
@@ -217,7 +244,19 @@ export function OverviewPage() {
     }
   }
 
-  if (error) return <p style={{ color: colors.danger }}>{error}</p>;
+  if (error) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+        <p style={{ color: colors.danger, margin: 0 }}>{error}</p>
+        <p style={{ fontSize: 12.5, opacity: 0.6, margin: 0 }}>
+          Meist ein vorübergehender Verbindungsaussetzer - ein erneuter Versuch hilft in der Regel.
+        </p>
+        <button type="button" onClick={load} style={primaryBtnStyle}>
+          Erneut versuchen
+        </button>
+      </div>
+    );
+  }
   if (!metrics || !messages || !orders) return <LoadingSpinner label="Wird geladen ..." />;
 
   const unreadMessages = messages.filter((m) => !m.read_at);

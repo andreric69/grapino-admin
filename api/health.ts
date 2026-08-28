@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin } from './_supabaseAdmin.js';
-import { pingSupabase } from './_health.js';
+import { pingSupabase, errorMessage } from './_health.js';
 
 const RECENT_ERRORS_LIMIT = 50;
 const WEINAPP_URL = 'https://weinsammlung-two.vercel.app';
@@ -48,6 +48,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       recentErrors: errorsResult.data ?? [],
     });
   } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
+    res.status(500).json({ error: errorMessage(e) });
   }
 }

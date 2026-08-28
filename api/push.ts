@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import { sendPush } from './_push.js';
+import { errorMessage } from './_health.js';
 
 const CATEGORY_LABELS: Record<string, string> = {
   allgemein: 'Allgemein',
@@ -56,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       res.status(200).json({ ok: true });
     } catch (e) {
-      res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
+      res.status(500).json({ error: errorMessage(e) });
     }
     return;
   }
@@ -99,7 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (error) throw error;
       res.status(200).json({ ok: true });
     } catch (e) {
-      res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
+      res.status(500).json({ error: errorMessage(e) });
     }
     return;
   }

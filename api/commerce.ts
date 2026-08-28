@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { logError } from './_health.js';
+import { logError, errorMessage } from './_health.js';
 
 // Auftraege, Zahlungsanfragen und Preise zusammen in einer Datei - wegen
 // Vercels 12-Funktionen-Limit auf dem Hobby-Plan, ausgewaehlt via
@@ -382,6 +382,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(400).json({ error: 'resource ("orders"|"payments"|"pricing") erforderlich.' });
   } catch (e) {
     await logError(getSupabaseAdmin(), 'commerce', e);
-    res.status(500).json({ error: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
+    res.status(500).json({ error: errorMessage(e) });
   }
 }

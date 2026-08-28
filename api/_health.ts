@@ -9,13 +9,33 @@ import { sendPush } from './_push.js';
 const NOTIFY_COOLDOWN_MS = 10 * 60 * 1000;
 
 /**
+ * Extrahiert eine lesbare Fehlermeldung aus einem catch(e)-Wert. NICHT nur
+ * `instanceof Error` pruefen: postgrest-js gibt bei einem reinen
+ * Netzwerkfehler (DNS-Aussetzer, Timeout, abgebrochene Verbindung zwischen
+ * Vercel und Supabase) ein PLAIN OBJECT mit {message, details, hint, code}
+ * zurueck statt eine echte PostgrestError-Instanz zu werfen - das faellt
+ * durch `instanceof Error` und landete bisher IMMER als "Unbekannter
+ * Fehler." im Log, ganz ohne brauchbare Details (live im admin_error_log
+ * bestaetigt: jeder einzelne Eintrag zeigte "Unbekannter Fehler." +
+ * detail=null). Deshalb hier zusaetzlich ein Objekt mit `message`-Property
+ * akzeptieren, bevor auf den generischen Text zurueckgefallen wird.
+ */
+export function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string') {
+    return (e as { message: string }).message;
+  }
+  return 'Unbekannter Fehler.';
+}
+
+/**
  * Schreibt einen Fehler in admin_error_log und loest (gedrosselt) eine Push-
  * Benachrichtigung aus. Wirft nie - ein fehlgeschlagenes Logging darf den
  * eigentlich fehlgeschlagenen Request nicht zusaetzlich crashen.
  */
 export async function logError(supabase: SupabaseClient, endpoint: string, e: unknown): Promise<void> {
-  const message = e instanceof Error ? e.message : 'Unbekannter Fehler.';
-  const detail = e instanceof Error ? (e.stack ?? null) : null;
+  const message = errorMessage(e);
+  const detail = e instanceof Error ? (e.stack ?? null) : e ? JSON.stringify(e) : null;
 
   try {
     const cutoff = new Date(Date.now() - NOTIFY_COOLDOWN_MS).toISOString();
