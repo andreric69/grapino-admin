@@ -1,0 +1,25 @@
+name: CI
+
+# Laeuft bei jedem Push und jedem Pull Request - faengt einen kaputten Commit
+# (Typfehler, fehlgeschlagener Build, fehlgeschlagener Test) VOR dem Deploy ab
+# statt danach. api/ hat ein eigenes tsconfig (Vercel-Funktionen, nicht Teil
+# des Vite-Frontend-Builds) - deshalb separat geprueft.
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Typprüfung der Vercel-Funktionen (api/)
+        run: npx tsc -p api/tsconfig.json --noEmit
+      - run: npm test

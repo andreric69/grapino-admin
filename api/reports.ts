@@ -172,7 +172,7 @@ async function buildAiUsage(supabase: SupabaseClient) {
 
 const DIACRITICS_RANGE = /[̀-ͯ]/g;
 
-function stripDiacritics(s: string): string {
+export function stripDiacritics(s: string): string {
   return s.normalize('NFD').replace(DIACRITICS_RANGE, '');
 }
 
@@ -186,9 +186,27 @@ const PRODUCER_PREFIXES = new Set([
   'kellerei', 'herrschaft', 'gebruder', 'famille',
 ]);
 
-function looksLikeProducerName(name: string): boolean {
+export function looksLikeProducerName(name: string): boolean {
   const firstWord = stripDiacritics(name.trim().toLowerCase()).split(/\s+/)[0] ?? '';
   return PRODUCER_PREFIXES.has(firstWord);
+}
+
+// Ein "en primeur"/Subskriptions-Kauf des naechsten Jahrgangs ist im Weinhandel
+// normal - erst ab zwei Jahren in der Zukunft ist ein Jahrgang mit hoher
+// Wahrscheinlichkeit ein Tippfehler (z. B. 2029 statt 2019) statt ein echter
+// Vorab-Kauf.
+export function isImplausibleFutureVintage(vintage: number | null, currentYear: number): boolean {
+  return vintage !== null && vintage > currentYear + 1;
+}
+
+// Grosszuegige Obergrenze bewusst weit ueber dem, was selbst seltene
+// Spitzenweine typischerweise kosten - soll nur eindeutige Zahlendreher/
+// verrutschte Kommastellen faenden (z. B. 5000.- statt 50.-), nicht echte,
+// aber teure Flaschen als Fehler markieren.
+export const IMPLAUSIBLE_PRICE_CHF = 50_000;
+
+export function isImplausiblePrice(price: number | null): boolean {
+  return price !== null && (price < 0 || price > IMPLAUSIBLE_PRICE_CHF);
 }
 
 interface DataQualityFlag {
@@ -198,7 +216,7 @@ interface DataQualityFlag {
   producer: string | null;
   vintage: number | null;
   email: string | null;
-  reason: 'missing_producer_looks_like_name';
+  reason: 'missing_producer_looks_like_name' | 'implausible_future_vintage' | 'implausible_price';
 }
 
 /**
@@ -230,7 +248,7 @@ interface DataQualityFlag {
 async function buildDataQuality(supabase: SupabaseClient): Promise<{ flags: DataQualityFlag[] }> {
   const [allUsers, winesRes, cacheRes] = await Promise.all([
     listAllUsers(supabase),
-    supabase.from('wines').select('id, user_id, name, producer, vintage'),
+    supabase.from('wines').select('id, user_id, name, producer, vintage, price'),
     supabase.from('wine_knowledge_cache').select('name_key, producer_key, vintage'),
   ]);
   if (winesRes.error) throw winesRes.error;
@@ -238,21 +256,31 @@ async function buildDataQuality(supabase: SupabaseClient): Promise<{ flags: Data
 
   const emailById = new Map(allUsers.map((u) => [u.id, u.email ?? null]));
   const flags: DataQualityFlag[] = [];
+  const currentYear = new Date().getFullYear();
 
   for (const w of winesRes.data ?? []) {
     const name = (w.name as string | null) ?? '';
     const producer = (w.producer as string | null)?.trim() || null;
+    const vintage = w.vintage as number | null;
+    const price = w.price as number | null;
     if (!name.trim()) continue;
+
+    const base = {
+      source: 'wines' as const,
+      id: w.id as string,
+      name,
+      producer,
+      vintage,
+      email: emailById.get(w.user_id as string) ?? null,
+    };
     if (!producer && looksLikeProducerName(name)) {
-      flags.push({
-        source: 'wines',
-        id: w.id as string,
-        name,
-        producer,
-        vintage: w.vintage as number | null,
-        email: emailById.get(w.user_id as string) ?? null,
-        reason: 'missing_producer_looks_like_name',
-      });
+      flags.push({ ...base, reason: 'missing_producer_looks_like_name' });
+    }
+    if (isImplausibleFutureVintage(vintage, currentYear)) {
+      flags.push({ ...base, reason: 'implausible_future_vintage' });
+    }
+    if (isImplausiblePrice(price)) {
+      flags.push({ ...base, reason: 'implausible_price' });
     }
   }
 

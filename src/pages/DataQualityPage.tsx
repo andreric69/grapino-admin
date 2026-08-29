@@ -11,11 +11,13 @@ interface DataQualityFlag {
   producer: string | null;
   vintage: number | null;
   email: string | null;
-  reason: 'missing_producer_looks_like_name';
+  reason: 'missing_producer_looks_like_name' | 'implausible_future_vintage' | 'implausible_price';
 }
 
 const REASON_LABELS: Record<DataQualityFlag['reason'], string> = {
   missing_producer_looks_like_name: 'Produzent-Feld leer, Name sieht wie ein Produzentenname aus',
+  implausible_future_vintage: 'Jahrgang liegt mehr als ein Jahr in der Zukunft',
+  implausible_price: 'Preis wirkt unrealistisch (negativ oder extrem hoch) - evtl. Zahlendreher',
 };
 
 /**
