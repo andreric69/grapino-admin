@@ -64,7 +64,27 @@ export function HealthPage() {
   const [error, setError] = useState<string | null>(null);
   const [pushState, setPushState] = useState<PushState>('unknown');
   const [pushError, setPushError] = useState<string | null>(null);
+  const [backupRunning, setBackupRunning] = useState(false);
+  const [backupResult, setBackupResult] = useState<string | null>(null);
+  const [backupError, setBackupError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function runBackup() {
+    setBackupRunning(true);
+    setBackupError(null);
+    setBackupResult(null);
+    try {
+      const res = await apiFetch('/api/backup');
+      const data = (await res.json()) as { ok?: boolean; bytes?: number; deletedOldBackups?: number; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'Sicherung fehlgeschlagen.');
+      const kb = Math.round((data.bytes ?? 0) / 1024);
+      setBackupResult(`Erstellt (${kb} KB)${data.deletedOldBackups ? `, ${data.deletedOldBackups} alte Sicherung(en) aufgeraeumt` : ''}.`);
+    } catch (e) {
+      setBackupError(e instanceof Error ? e.message : 'Sicherung fehlgeschlagen.');
+    } finally {
+      setBackupRunning(false);
+    }
+  }
 
   async function load() {
     try {
@@ -162,6 +182,17 @@ export function HealthPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
             <StatusCard label="Supabase" ping={health.supabase} />
             <StatusCard label="Weinapp" ping={health.weinapp} />
+            <div style={cardStyle}>
+              <div style={kickerStyle}>Datensicherung</div>
+              <div style={{ fontSize: 11.5, opacity: 0.6, marginTop: 4, marginBottom: 6 }}>
+                Läuft automatisch täglich um 03:00 Uhr - Weine, Zahlungen, Aufträge, Kosten. 30 Tage aufbewahrt.
+              </div>
+              <button type="button" style={primaryBtnStyle} onClick={runBackup} disabled={backupRunning}>
+                {backupRunning ? 'Läuft ...' : 'Jetzt sichern'}
+              </button>
+              {backupResult && <div style={{ fontSize: 12, color: colors.success, marginTop: 6 }}>{backupResult}</div>}
+              {backupError && <div style={{ fontSize: 12, color: colors.danger, marginTop: 6 }}>{backupError}</div>}
+            </div>
             <div style={cardStyle}>
               <div style={kickerStyle}>Push-Benachrichtigungen</div>
               {pushState === 'unsupported' && <div style={{ marginTop: 6, fontSize: 13 }}>In diesem Browser nicht unterstützt.</div>}
