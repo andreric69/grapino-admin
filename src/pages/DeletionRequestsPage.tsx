@@ -36,7 +36,7 @@ export function DeletionRequestsPage() {
   async function handle(request: DeletionRequest, action: 'approve' | 'reject') {
     const confirmMsg =
       action === 'approve'
-        ? `WIRKLICH löschen? "${request.email ?? request.userId}" verliert unwiderruflich alle ${request.wineCount} Weine.`
+        ? `WIRKLICH löschen? Das Konto "${request.email ?? request.userId}" wird komplett gelöscht - alle ${request.wineCount} Weine, sämtliche Daten und der Zugang selbst. Unwiderruflich.`
         : `Anfrage von "${request.email ?? request.userId}" ablehnen? Die Daten bleiben erhalten.`;
     if (!window.confirm(confirmMsg)) return;
 

@@ -104,8 +104,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (action === 'approve') {
-        // Fotos aus dem Storage-Bucket UND alle Weine des Nutzers loeschen -
-        // dieselbe Aktion, die vorher direkt aus der Weinapp heraus lief.
+        // Fotos aus dem Storage-Bucket loeschen (das einzige, was NICHT an
+        // die auth.users-Zeile gekoppelt ist) - danach das Konto selbst
+        // loeschen. Alle Tabellen mit user_id-Bezug (wines, user_access,
+        // payment_requests, enrichment_orders, app_feedback,
+        // wine_consumption_log, wine_recognition_refs, label_recognition_log,
+        // admin_user_notes, deletion_requests selbst, etc.) sind mit
+        // "on delete cascade" an auth.users gebunden - das Loeschen des
+        // Auth-Kontos raeumt automatisch ueberall auf, kein manuelles
+        // Abklappern jeder Tabelle noetig. Damit ist es eine vollstaendige
+        // Konto-Loeschung, nicht nur eine Weinsammlung-Loeschung.
         const { data: wines, error: winesError } = await supabase
           .from('wines')
           .select('photo_url, photo_urls')
@@ -118,8 +126,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (storageError) throw storageError;
         }
 
-        const { error: deleteError } = await supabase.from('wines').delete().eq('user_id', request.user_id);
-        if (deleteError) throw deleteError;
+        const { error: deleteUserError } = await supabase.auth.admin.deleteUser(request.user_id);
+        if (deleteUserError) throw deleteUserError;
       }
 
       res.status(200).json({ ok: true });
