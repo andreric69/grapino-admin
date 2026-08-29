@@ -23,6 +23,12 @@ interface AdminUserRow {
   trialEndsAt: string | null;
   aiDailyLimit: number | null;
   customAccessFee: number | null;
+  // Neuste Zahlungsanfrage (unabhaengig vom Status) - fuer eine Ampel in der
+  // Nutzerliste, ohne dass man dafuer erst ins Detail klicken muss. Bewusst
+  // kein eigenes neues "Abo"-Feld/Konzept - nutzt dieselben Zahlungsanfragen,
+  // die es schon fuer Zugangsgebuehr/Auftraege gibt (Andrin legt fuer ein
+  // Abo einfach eine Zahlungsanfrage mit passendem Grund an).
+  lastPayment: { reason: string; status: string; createdAt: string } | null;
 }
 
 interface UserAccessRow {
@@ -38,18 +44,29 @@ interface UserAccessRow {
 async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminUserRow[]> {
   const allUsers = await listAllUsers(supabase);
 
-  const [winesRes, accessRes] = await Promise.all([
+  const [winesRes, accessRes, paymentsRes] = await Promise.all([
     supabase.from('wines').select('user_id'),
     supabase.from('user_access').select('user_id, is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, custom_access_fee'),
+    supabase.from('payment_requests').select('user_id, reason, status, created_at').order('created_at', { ascending: false }),
   ]);
   if (winesRes.error) throw winesRes.error;
   if (accessRes.error) throw accessRes.error;
+  if (paymentsRes.error) throw paymentsRes.error;
 
   const wineCountByUser = new Map<string, number>();
   for (const row of winesRes.data ?? []) {
     wineCountByUser.set(row.user_id, (wineCountByUser.get(row.user_id) ?? 0) + 1);
   }
   const accessByUser = new Map<string, UserAccessRow>((accessRes.data ?? []).map((a) => [a.user_id, a as UserAccessRow]));
+  // Ergebnis ist bereits nach created_at absteigend sortiert (siehe Query
+  // oben) - das erste Vorkommen pro Nutzer ist damit automatisch die
+  // neuste Zahlungsanfrage.
+  const lastPaymentByUser = new Map<string, { reason: string; status: string; createdAt: string }>();
+  for (const p of paymentsRes.data ?? []) {
+    if (!lastPaymentByUser.has(p.user_id)) {
+      lastPaymentByUser.set(p.user_id, { reason: p.reason, status: p.status, createdAt: p.created_at });
+    }
+  }
 
   return allUsers
     .map((u) => {
@@ -69,6 +86,7 @@ async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminU
         trialEndsAt: access?.trial_ends_at ?? null,
         aiDailyLimit: access?.ai_daily_limit ?? null,
         customAccessFee: access?.custom_access_fee ?? null,
+        lastPayment: lastPaymentByUser.get(u.id) ?? null,
       };
     })
     .sort((a, b) => a.email?.localeCompare(b.email ?? '') ?? 0);

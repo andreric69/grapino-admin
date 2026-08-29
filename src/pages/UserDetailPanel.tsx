@@ -43,6 +43,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [blockReason, setBlockReason] = useState('');
   const [blockAmount, setBlockAmount] = useState('');
   const [trialEndsAt, setTrialEndsAt] = useState('');
+  const [extendDays, setExtendDays] = useState('7');
   const [aiDailyLimit, setAiDailyLimit] = useState('');
   const [customAccessFee, setCustomAccessFee] = useState('');
   const [savingAccess, setSavingAccess] = useState(false);
@@ -97,6 +98,21 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     } finally {
       setSavingAccess(false);
     }
+  }
+
+  // Verlaengert ab dem SPAETEREN von "heute" und dem aktuell gesetzten Datum -
+  // ein bereits abgelaufenes Testabo wird also ab heute neu gerechnet (nicht
+  // von einem Datum in der Vergangenheit aus), ein noch laufendes einfach um
+  // die angegebene Tageszahl verlaengert. Setzt nur das Formularfeld - wie
+  // die anderen Felder hier erst mit "Einstellungen speichern" wirksam.
+  function extendTrial() {
+    const days = parseInt(extendDays, 10);
+    if (!days || days <= 0) return;
+    const today = new Date();
+    const current = trialEndsAt ? new Date(`${trialEndsAt}T00:00:00`) : null;
+    const base = current && current.getTime() > today.getTime() ? current : today;
+    base.setDate(base.getDate() + days);
+    setTrialEndsAt(base.toISOString().slice(0, 10));
   }
 
   async function generateLoginLink() {
@@ -200,17 +216,22 @@ export function UserDetailPanel({ userId }: { userId: string }) {
               title="Testabo-Ende (zeigt dem Nutzer beim Login einen Hinweis, blockiert nichts automatisch)"
               style={{ ...inputStyle, flex: 1 }}
             />
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="number"
+              min={1}
+              value={extendDays}
+              onChange={(e) => setExtendDays(e.target.value)}
+              style={{ ...inputStyle, width: 64 }}
+            />
             <button
               type="button"
-              onClick={() => {
-                const d = new Date();
-                d.setDate(d.getDate() + 7);
-                setTrialEndsAt(d.toISOString().slice(0, 10));
-              }}
-              title="Setzt das Datum auf heute + 7 Tage"
+              onClick={extendTrial}
+              title="Zaehlt die Tage zum aktuellen Testabo-Datum dazu (oder ab heute, falls abgelaufen/leer) - danach unten speichern"
               style={{ ...secondaryBtnStyle, whiteSpace: 'nowrap', padding: '6px 10px', fontSize: 12.5 }}
             >
-              7 Tage
+              Tage verlängern
             </button>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>

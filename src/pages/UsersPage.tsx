@@ -14,7 +14,11 @@ interface AdminUser {
   wineCount: number;
   isBlocked: boolean;
   trialEndsAt: string | null;
+  lastPayment: { reason: string; status: string; createdAt: string } | null;
 }
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = { paid: 'bezahlt', open: 'offen', cancelled: 'storniert' };
+const PAYMENT_STATUS_COLORS: Record<string, string> = { paid: colors.success, open: colors.gold, cancelled: colors.textMuted };
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return '-';
@@ -192,6 +196,14 @@ export function UsersPage() {
                   )}
                   {u.trialEndsAt && (
                     <div style={{ fontSize: 11, opacity: 0.55 }}>Testabo bis {u.trialEndsAt}</div>
+                  )}
+                  {u.lastPayment && (
+                    <div style={{ fontSize: 11, marginTop: 2 }}>
+                      <span style={{ color: PAYMENT_STATUS_COLORS[u.lastPayment.status] ?? colors.textMuted, fontWeight: 600 }}>
+                        {PAYMENT_STATUS_LABELS[u.lastPayment.status] ?? u.lastPayment.status}
+                      </span>
+                      <span style={{ opacity: 0.55 }}> · {u.lastPayment.reason}</span>
+                    </div>
                   )}
                 </td>
                 <td style={{ padding: '6px 8px' }}>
