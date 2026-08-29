@@ -45,6 +45,7 @@ const ANLEITUNG_ONBOARDING = `${APP_URL}/Grapino-Anleitung.pdf`;
 const ANLEITUNG_WEINE_ANLEGEN = `${APP_URL}/Grapino-Anleitung-Weine-Anlegen.pdf`;
 const ANLEITUNG_APP = `${APP_URL}/Grapino-Anleitung-App.pdf`;
 const ANLEITUNG_NACHRICHTEN = `${APP_URL}/Grapino-Anleitung-Nachrichten.pdf`;
+const ANLEITUNG_AUFTRAEGE = `${APP_URL}/Grapino-Anleitung-Auftraege.pdf`;
 
 function formatDate(iso: string | null): string {
   if (!iso) return '[DATUM]';
@@ -71,7 +72,8 @@ const TEMPLATES: Template[] = [
       `- Erste Schritte: ${ANLEITUNG_ONBOARDING}\n` +
       `- Weine anlegen: ${ANLEITUNG_WEINE_ANLEGEN}\n` +
       `- So funktioniert die App: ${ANLEITUNG_APP}\n` +
-      `- Kontakt und Nachrichten: ${ANLEITUNG_NACHRICHTEN}\n\n` +
+      `- Kontakt und Nachrichten: ${ANLEITUNG_NACHRICHTEN}\n` +
+      `- Aktualisierungs-Aufträge geben: ${ANLEITUNG_AUFTRAEGE}\n\n` +
       `Bei Fragen einfach über die Chat-Blase unten links oder direkt bei mir melden.\n\nAndrin`,
   },
   {
@@ -105,6 +107,17 @@ const TEMPLATES: Template[] = [
       `Hallo ${name}\n\n` +
       `Kurz erklärt, wie du mich über die App erreichst und wie du Aktualisierungs-Aufträge gibst:\n\n` +
       `${ANLEITUNG_NACHRICHTEN}\n\n` +
+      `Bei Fragen einfach melden.\n\nAndrin`,
+  },
+  {
+    key: 'auftraege',
+    title: 'Aktualisierungs-Aufträge geben',
+    hint: 'Ausführliche Anleitung, wie man einen Auftrag gibt, die drei Arten und was den Preis bestimmt.',
+    subject: 'Grapino - Aktualisierungs-Aufträge geben',
+    body: ({ name }) =>
+      `Hallo ${name}\n\n` +
+      `Hier eine ausführliche Anleitung, wie du einen Aktualisierungs-Auftrag gibst - die drei Auftragsarten (Aktualisierung aller Weine, neue Weine ohne Foto, Import-Aktualisierung inkl. Foto) und was den Preis bestimmt:\n\n` +
+      `${ANLEITUNG_AUFTRAEGE}\n\n` +
       `Bei Fragen einfach melden.\n\nAndrin`,
   },
   {
