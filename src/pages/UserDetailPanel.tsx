@@ -197,9 +197,21 @@ export function UserDetailPanel({ userId }: { userId: string }) {
               type="date"
               value={trialEndsAt}
               onChange={(e) => setTrialEndsAt(e.target.value)}
-              title="Testabo-Ende (nur informativ, blockiert nichts automatisch)"
+              title="Testabo-Ende (zeigt dem Nutzer beim Login einen Hinweis, blockiert nichts automatisch)"
               style={{ ...inputStyle, flex: 1 }}
             />
+            <button
+              type="button"
+              onClick={() => {
+                const d = new Date();
+                d.setDate(d.getDate() + 7);
+                setTrialEndsAt(d.toISOString().slice(0, 10));
+              }}
+              title="Setzt das Datum auf heute + 7 Tage"
+              style={{ ...secondaryBtnStyle, whiteSpace: 'nowrap', padding: '6px 10px', fontSize: 12.5 }}
+            >
+              7 Tage
+            </button>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <div style={{ flex: 1 }}>
