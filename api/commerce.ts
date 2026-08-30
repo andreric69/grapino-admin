@@ -11,16 +11,22 @@ import { logError, errorMessage } from './_health.js';
 const PRICING_FIELDS =
   'refresh_price, neue_weine_price, ultra_price, standard_min_price, standard_max_price, ultra_min_price, ultra_max_price, access_fee, updated_at';
 
+// "neue_weine" ist seit dem Auftrag-Dialog-Umbau nicht mehr waehlbar (siehe
+// SELECTABLE_ORDER_CATEGORIES in der Weinapp) - bleibt hier nur noch fuer
+// bereits bestehende, alte Auftraege mit dieser Kategorie erhalten.
 const CATEGORY_LABELS: Record<string, string> = {
-  refresh: 'Aktualisierung aller Weine',
+  refresh: 'Weine aktualisieren',
   neue_weine: 'Neue Weine (ohne Foto)',
-  ultra: 'Import-Aktualisierung (inkl. Foto)',
+  ultra: 'Import',
 };
 
+// WICHTIG: keine Fotos mehr von fremden Seiten (Vivino etc.) suchen/kopieren
+// - Urheberrechtsrisiko. Foto nur uebernehmen, wenn der Kunde selbst eins von
+// seiner Flasche mitgeschickt hat, sonst bleibt der Wein ohne Foto.
 const CATEGORY_INSTRUCTIONS: Record<string, string> = {
-  refresh: 'Fuer die unten gelisteten Weine bitte ALLE recherchierbaren Angaben aktualisieren (Region, Subregion, Rebsorte, Trinkfenster, Kritiker-Punkte, Food-Pairing etc).',
+  refresh: 'Fuer die unten gelisteten Weine bitte ALLE recherchierbaren Angaben aktualisieren (Region, Subregion, Rebsorte, Trinkfenster, Kritiker-Punkte, Food-Pairing etc). KEIN Foto von einer fremden Seite hinzufuegen.',
   neue_weine: 'Die unten gelisteten Weine wurden per Foto hinzugefuegt (Etikett-Foto ist also schon vorhanden) und haben sonst kaum Angaben - bitte alle Basisdaten ergaenzen (Region, Rebsorte, Trinkfenster etc), wo recherchierbar. KEIN Foto suchen/aendern.',
-  ultra: 'Fuer die unten gelisteten Weine (typischerweise aus einem CSV-Import ohne Fotos) bitte RUNDUM-SORGLOS-Recherche: Fotos (Etikett, klar erkennbar, exakt passender Jahrgang), Region/Subregion, Rebsorte, Trinkfenster, Kritiker-Punkte, Food-Pairing - alles Verfuegbare.',
+  ultra: 'Fuer die unten gelisteten Weine (typischerweise aus einem CSV-Import ohne Fotos) bitte alle recherchierbaren Angaben ergaenzen: Region/Subregion, Rebsorte, Trinkfenster, Kritiker-Punkte, Food-Pairing. KEIN Foto von einer fremden Seite (Vivino etc.) suchen oder kopieren - Urheberrechtsrisiko. Der Wein bleibt ohne Foto, ausser der Kunde schickt selbst eins von seiner Flasche.',
 };
 
 interface WineRef {

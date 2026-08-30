@@ -4,11 +4,14 @@ Internes Verwaltungs-Tool für die [Grapino](../claude%20weinapp) Weinsammlungs-
 
 ## Funktionen (Ausbaustufen)
 
-- [x] Login (einzelnes, fest hinterlegtes Admin-Passwort)
-- [ ] Nutzerverwaltung (Liste, Deaktivieren/Reaktivieren)
-- [ ] Löschanfragen (Nutzer beantragt Löschung der ganzen Sammlung in der Haupt-App, Admin bestätigt hier erst die tatsächliche Löschung)
-- [ ] News/Ankündigungen (werden in der Haupt-App angezeigt)
-- [ ] Kosten-Übersicht (Platzhalter)
+- [x] Login (Admin-Passwort, mit Bremse gegen wiederholtes Falsch-Raten)
+- [x] Nutzerverwaltung (Liste, Sperren/Entsperren, Testphase verlängern, individuelle Zugangsgebühr/KI-Limit)
+- [x] Löschanfragen (Nutzer beantragt vollständige Konto-Löschung in der Haupt-App, Admin bestätigt hier erst die tatsächliche Löschung - entfernt dann auch das Login-Konto selbst)
+- [x] News/Ankündigungen (werden in der Haupt-App angezeigt, optional an einzelne Nutzer)
+- [x] Kosten-/Einnahmen-Übersicht inkl. Speicherverbrauch pro Nutzer
+- [x] Zahlungsanfragen &amp; Aktualisierungs-Aufträge (Preise editierbar)
+- [x] Feedback &amp; Nachrichten der Nutzer, inkl. Push-Benachrichtigung
+- [x] Tägliche automatische Datensicherung (`/api/backup`, Vercel Cron)
 
 ## Architektur
 
