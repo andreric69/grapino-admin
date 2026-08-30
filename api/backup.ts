@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
-import { isAuthorized } from './_auth.js';
+import { isAuthorized, safeEqualStrings } from './_auth.js';
 import { getSupabaseAdmin } from './_supabaseAdmin.js';
 import { logError, errorMessage } from './_health.js';
 
@@ -36,7 +36,7 @@ function isAuthorizedForBackup(req: VercelRequest): boolean {
   if (isAuthorized(req)) return true; // manueller Aufruf aus der Admin-App
   const secret = process.env.CRON_SECRET;
   const header = req.headers.authorization;
-  return !!secret && header === `Bearer ${secret}`; // automatischer Vercel-Cron-Aufruf
+  return !!secret && !!header && safeEqualStrings(header, `Bearer ${secret}`); // automatischer Vercel-Cron-Aufruf
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

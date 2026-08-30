@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from './_types.js';
-import { isAuthorized } from './_auth.js';
+import { isAuthorized, safeEqualStrings } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import { sendPush } from './_push.js';
 import { errorMessage } from './_health.js';
@@ -30,7 +30,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const secret = process.env.PUSH_WEBHOOK_SECRET;
-    if (!secret || req.headers['x-push-webhook-secret'] !== secret) {
+    const provided = req.headers['x-push-webhook-secret'];
+    if (!secret || typeof provided !== 'string' || !safeEqualStrings(provided, secret)) {
       res.status(401).json({ error: 'Nicht autorisiert.' });
       return;
     }
