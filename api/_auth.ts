@@ -49,3 +49,11 @@ export function isAuthorized(req: VercelRequest): boolean {
   if (!header?.startsWith('Bearer ')) return false;
   return verifySessionToken(header.slice('Bearer '.length), secret);
 }
+
+/** Zeitsicherer String-Vergleich fuer geheime Werte (Webhook-/Cron-Secrets) - verhindert, dass die Antwortzeit die richtige Laenge/Praefix verraet. */
+export function safeEqualStrings(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
