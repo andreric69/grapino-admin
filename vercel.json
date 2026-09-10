@@ -1,5 +1,9 @@
 {
-  "crons": [{ "path": "/api/backup", "schedule": "0 3 * * *" }],
+  "crons": [
+    { "path": "/api/backup", "schedule": "0 3 * * *" },
+    { "path": "/api/backup?job=photos", "schedule": "0 4 * * 0" },
+    { "path": "/api/backup?job=purge-trash", "schedule": "0 5 * * *" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
