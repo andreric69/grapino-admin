@@ -5,9 +5,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logError, errorMessage } from './_health.js';
 
 // Aktivitaets-Feed, Kosten-/Einnahmen-Uebersicht, Speicher-Uebersicht,
-// KI-Nutzung und Datenqualitaets-Check zusammen in einer Datei - wegen
-// Vercels 12-Funktionen-Limit auf dem Hobby-Plan, ausgewaehlt via
-// ?resource=activity|costs|income|storage|ai-usage|data-quality.
+// KI-Nutzung, Datenqualitaets-Check und Analytics/Monatsbericht zusammen in
+// einer Datei - wegen Vercels 12-Funktionen-Limit auf dem Hobby-Plan,
+// ausgewaehlt via
+// ?resource=activity|costs|income|storage|ai-usage|data-quality|analytics|monthly-report.
 
 const BUCKET = 'wine-photos';
 // Supabase-Speicherlimit fuer den aktuellen Plan (MB) - im Supabase-Dashboard
@@ -296,6 +297,200 @@ async function buildDataQuality(supabase: SupabaseClient): Promise<{ flags: Data
   return { flags };
 }
 
+// --- Analytics/Charts & Monatsbericht ---------------------------------------
+// Alle Zeitstempel in dieser Codebasis sind ISO-Strings aus Postgres
+// (timestamptz -> "2026-01-15T10:23:00+00:00" bzw. mit "Z"), also immer UTC
+// und lexikografisch sortierbar - simples String-Slicing auf "YYYY-MM"
+// reicht deshalb aus, keine Zeitzonen-Bibliothek noetig.
+
+export function monthKeyFromIso(iso: string): string {
+  return iso.slice(0, 7);
+}
+
+export function currentMonthKey(referenceDate: Date = new Date()): string {
+  return referenceDate.toISOString().slice(0, 7);
+}
+
+export function isValidMonthKey(s: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+}
+
+function shiftMonthKey(month: string, deltaMonths: number): string {
+  const [year, mon] = month.split('-').map(Number);
+  const d = new Date(Date.UTC(year, mon - 1 + deltaMonths, 1));
+  return currentMonthKey(d);
+}
+
+// 13 Monate (rollierend, endet im aktuellen Monat) statt nur 12 - so laesst
+// sich auf der Frontend-Seite sowohl "dieses Jahr vs. letztes Jahr" als auch
+// ein einfacher Monat-zu-Monat-Trend berechnen (braucht den Vormonat des
+// aeltesten Jahresmonats als Referenzpunkt).
+export function getLast13Months(referenceDate: Date = new Date()): string[] {
+  const current = currentMonthKey(referenceDate);
+  const months: string[] = [];
+  for (let i = 12; i >= 0; i--) {
+    months.push(shiftMonthKey(current, -i));
+  }
+  return months;
+}
+
+function initMonthBucket(months: string[]): Map<string, number> {
+  return new Map(months.map((m) => [m, 0]));
+}
+
+async function buildAnalytics(supabase: SupabaseClient) {
+  const months = getLast13Months();
+
+  const [allUsers, paymentsRes, scansRes] = await Promise.all([
+    listAllUsers(supabase),
+    supabase.from('payment_requests').select('amount, paid_at').eq('status', 'paid'),
+    supabase.from('label_recognition_log').select('created_at'),
+  ]);
+  if (paymentsRes.error) throw paymentsRes.error;
+  if (scansRes.error) throw scansRes.error;
+
+  const revenueByMonthMap = initMonthBucket(months);
+  for (const p of paymentsRes.data ?? []) {
+    if (!p.paid_at) continue; // sollte bei status='paid' immer gesetzt sein, siehe commerce.ts - defensiv trotzdem geprueft
+    const key = monthKeyFromIso(p.paid_at);
+    if (revenueByMonthMap.has(key)) {
+      revenueByMonthMap.set(key, revenueByMonthMap.get(key)! + Number(p.amount));
+    }
+  }
+
+  // Fuer die kumulative Nutzerzahl pro Monat werden auch Signups VOR dem
+  // 13-Monats-Fenster gebraucht (als Startwert), sonst wuerde totalUsers im
+  // aeltesten Monat faelschlich bei 0 statt beim tatsaechlichen Bestand
+  // beginnen.
+  const windowStart = months[0];
+  const newUsersByMonthMap = initMonthBucket(months);
+  let usersBeforeWindow = 0;
+  for (const u of allUsers) {
+    if (!u.created_at) continue;
+    const key = monthKeyFromIso(u.created_at);
+    if (key < windowStart) {
+      usersBeforeWindow += 1;
+    } else if (newUsersByMonthMap.has(key)) {
+      newUsersByMonthMap.set(key, newUsersByMonthMap.get(key)! + 1);
+    }
+  }
+
+  const scansByMonthMap = initMonthBucket(months);
+  for (const s of scansRes.data ?? []) {
+    const key = monthKeyFromIso(s.created_at);
+    if (scansByMonthMap.has(key)) {
+      scansByMonthMap.set(key, scansByMonthMap.get(key)! + 1);
+    }
+  }
+
+  let runningTotal = usersBeforeWindow;
+  const userGrowthByMonth = months.map((month) => {
+    const newUsers = newUsersByMonthMap.get(month)!;
+    runningTotal += newUsers;
+    return { month, newUsers, totalUsers: runningTotal };
+  });
+
+  const revenueByMonth = months.map((month) => ({
+    month,
+    amountChf: Math.round((revenueByMonthMap.get(month) ?? 0) * 100) / 100,
+  }));
+
+  const scansByMonth = months.map((month) => ({ month, scans: scansByMonthMap.get(month) ?? 0 }));
+
+  return { revenueByMonth, userGrowthByMonth, scansByMonth };
+}
+
+/**
+ * Ein "monatlich" laufender Kosten-Eintrag zaehlt in JEDEM Monat ab (inkl.)
+ * seinem Erstellungsmonat, ein "einmalig"er nur im eigenen Erstellungsmonat.
+ * String-Vergleich auf "YYYY-MM" reicht fuer "ab/vor" wie bei den anderen
+ * Monats-Keys hier.
+ */
+export function isCostActiveInMonth(cost: { createdAt: string; recurrence: string | null }, month: string): boolean {
+  const createdMonth = monthKeyFromIso(cost.createdAt);
+  if (cost.recurrence === 'monatlich') {
+    return createdMonth <= month;
+  }
+  return createdMonth === month;
+}
+
+interface MonthlyReportData {
+  month: string;
+  revenueChf: number;
+  costsChf: number;
+  incomeChf: number;
+  netProfitChf: number;
+  newUsers: number;
+  scans: number;
+}
+
+async function buildMonthlyReport(supabase: SupabaseClient, month: string): Promise<MonthlyReportData> {
+  const [allUsers, paymentsRes, costsRes, incomeRes, scansRes] = await Promise.all([
+    listAllUsers(supabase),
+    supabase.from('payment_requests').select('amount, paid_at').eq('status', 'paid'),
+    supabase.from('admin_costs').select('amount, created_at, recurrence'),
+    supabase.from('admin_income').select('amount, created_at'),
+    supabase.from('label_recognition_log').select('created_at'),
+  ]);
+  if (paymentsRes.error) throw paymentsRes.error;
+  if (costsRes.error) throw costsRes.error;
+  if (incomeRes.error) throw incomeRes.error;
+  if (scansRes.error) throw scansRes.error;
+
+  const revenueChf = (paymentsRes.data ?? [])
+    .filter((p) => p.paid_at && monthKeyFromIso(p.paid_at) === month)
+    .reduce((sum, p) => sum + Number(p.amount), 0);
+
+  const costsChf = (costsRes.data ?? [])
+    .filter((c) => isCostActiveInMonth({ createdAt: c.created_at, recurrence: c.recurrence }, month))
+    .reduce((sum, c) => sum + Number(c.amount), 0);
+
+  const incomeChf = (incomeRes.data ?? [])
+    .filter((i) => monthKeyFromIso(i.created_at) === month)
+    .reduce((sum, i) => sum + Number(i.amount), 0);
+
+  const newUsers = allUsers.filter((u) => u.created_at && monthKeyFromIso(u.created_at) === month).length;
+
+  const scans = (scansRes.data ?? []).filter((s) => monthKeyFromIso(s.created_at) === month).length;
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  return {
+    month,
+    revenueChf: round2(revenueChf),
+    costsChf: round2(costsChf),
+    incomeChf: round2(incomeChf),
+    netProfitChf: round2(revenueChf + incomeChf - costsChf),
+    newUsers,
+    scans,
+  };
+}
+
+// Werte hier sind ausschliesslich Zahlen und ein fest vorgegebenes deutsches
+// Label (keine Nutzereingaben) - Escaping ist daher nicht zwingend noetig,
+// aber defensiv trotzdem vorhanden, falls sich das mal aendert.
+export function csvEscape(value: string | number): string {
+  const str = String(value);
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+export function formatMonthlyReportCsv(data: MonthlyReportData): string {
+  const rows: Array<[string, string | number]> = [
+    ['Monat', data.month],
+    ['Umsatz (CHF)', data.revenueChf],
+    ['Kosten (CHF)', data.costsChf],
+    ['Einnahmen (CHF)', data.incomeChf],
+    ['Nettogewinn (CHF)', data.netProfitChf],
+    ['Neue Nutzer', data.newUsers],
+    ['Scans', data.scans],
+  ];
+  const lines = ['Kennzahl,Wert', ...rows.map(([label, value]) => `${csvEscape(label)},${csvEscape(value)}`)];
+  return lines.join('\n') + '\n';
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isAuthorized(req)) {
     res.status(401).json({ error: 'Nicht angemeldet.' });
@@ -482,7 +677,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    res.status(400).json({ error: 'resource ("activity"|"costs"|"income"|"storage"|"ai-usage"|"data-quality") erforderlich.' });
+    if (resource === 'analytics') {
+      if (req.method !== 'GET') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+      }
+      res.status(200).json(await buildAnalytics(supabase));
+      return;
+    }
+
+    if (resource === 'monthly-report') {
+      if (req.method !== 'GET') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+      }
+      const monthParam = typeof req.query.month === 'string' ? req.query.month : null;
+      const month = monthParam && isValidMonthKey(monthParam) ? monthParam : currentMonthKey();
+      const report = await buildMonthlyReport(supabase, month);
+      const csv = formatMonthlyReportCsv(report);
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="grapino-bericht-${month}.csv"`);
+      res.status(200).send(csv);
+      return;
+    }
+
+    res.status(400).json({
+      error: 'resource ("activity"|"costs"|"income"|"storage"|"ai-usage"|"data-quality"|"analytics"|"monthly-report") erforderlich.',
+    });
   } catch (e) {
     await logError(getSupabaseAdmin(), 'reports', e);
     res.status(500).json({ error: errorMessage(e) });

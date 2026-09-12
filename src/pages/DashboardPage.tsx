@@ -16,9 +16,11 @@ import { EmailTemplatesPage } from './EmailTemplatesPage';
 import { FinancesPage } from './FinancesPage';
 import { OverviewPage } from './OverviewPage';
 import { HealthPage } from './HealthPage';
+import { AnalyticsPage } from './AnalyticsPage';
 
 type Tab =
   | 'overview'
+  | 'analytics'
   | 'users'
   | 'deletions'
   | 'messages'
@@ -36,6 +38,7 @@ type Tab =
 
 const NAV: { key: Tab; label: string; icon: string }[] = [
   { key: 'overview', label: 'Übersicht', icon: '\u{1F4CA}' },
+  { key: 'analytics', label: 'Auswertungen', icon: '\u{1F4C9}' },
   { key: 'users', label: 'Nutzer', icon: '\u{1F464}' },
   { key: 'deletions', label: 'Löschanfragen', icon: '\u{1F5D1}\u{FE0F}' },
   { key: 'messages', label: 'Nachrichten', icon: '\u{1F4AC}' },
@@ -211,6 +214,7 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
             </h1>
           )}
           {tab === 'overview' && <OverviewPage />}
+          {tab === 'analytics' && <AnalyticsPage />}
           {tab === 'deletions' && <DeletionRequestsPage />}
           {tab === 'users' && <UsersPage />}
           {tab === 'messages' && <MessagesPage />}
