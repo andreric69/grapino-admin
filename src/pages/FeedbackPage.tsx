@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
-import { cardStyle, colors, inputStyle, primaryBtnStyle } from '../theme';
+import { cardStyle, colors, inputStyle, primaryBtnStyle, secondaryBtnStyle } from '../theme';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 
@@ -14,12 +14,17 @@ interface FeedbackRow {
   reply: string | null;
 }
 
+const RATING_FILTERS = [5, 4, 3, 2, 1] as const;
+
 export function FeedbackPage() {
   const [feedback, setFeedback] = useState<FeedbackRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [ratingFilter, setRatingFilter] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
+  const [onlyUnanswered, setOnlyUnanswered] = useState(false);
 
   async function load() {
     setError(null);
@@ -73,13 +78,68 @@ export function FeedbackPage() {
     }
   }
 
+  const filteredFeedback = useMemo(() => {
+    if (!feedback) return [];
+    const query = search.trim().toLowerCase();
+    return feedback.filter((f) => {
+      if (ratingFilter !== null && f.rating !== ratingFilter) return false;
+      if (onlyUnanswered && f.reply) return false;
+      if (query) {
+        const haystack = `${f.message ?? ''} ${f.email ?? ''}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [feedback, ratingFilter, search, onlyUnanswered]);
+
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!feedback) return <LoadingSpinner label="Wird geladen ..." />;
   if (feedback.length === 0) return <EmptyState icon="⭐" text="Noch kein Feedback." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {feedback.map((f) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setRatingFilter(null)}
+            style={ratingFilter === null ? primaryBtnStyle : secondaryBtnStyle}
+          >
+            Alle
+          </button>
+          {RATING_FILTERS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRatingFilter(r)}
+              style={ratingFilter === r ? primaryBtnStyle : secondaryBtnStyle}
+            >
+              {r}★
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="search"
+            placeholder="Suche nach Kommentar oder E-Mail ..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ ...inputStyle, flex: '1 1 220px' }}
+          />
+          <label style={{ fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={onlyUnanswered}
+              onChange={(e) => setOnlyUnanswered(e.target.checked)}
+            />
+            Nur unbeantwortet
+          </label>
+        </div>
+      </div>
+
+      {filteredFeedback.length === 0 && <EmptyState icon="🔍" text="Kein Feedback gefunden." />}
+
+      {filteredFeedback.map((f) => (
         <div key={f.id} style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <strong>{f.email ?? 'Unbekannt'}</strong>

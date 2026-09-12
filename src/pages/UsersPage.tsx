@@ -51,10 +51,40 @@ function formatDateTime(iso: string | null): string {
   return new Date(iso).toLocaleString('de-CH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatDate(iso: string | null): string {
+  if (!iso) return '-';
+  return new Date(iso).toLocaleDateString('de-CH', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+type SortKey = 'email' | 'createdAt' | 'wineCount' | 'lastSignInAt';
+type SortDir = 'asc' | 'desc';
+
+function compareUsers(a: AdminUser, b: AdminUser, key: SortKey, dir: SortDir): number {
+  let cmp = 0;
+  switch (key) {
+    case 'email':
+      cmp = (a.email ?? '').localeCompare(b.email ?? '');
+      break;
+    case 'createdAt':
+      cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      break;
+    case 'wineCount':
+      cmp = a.wineCount - b.wineCount;
+      break;
+    case 'lastSignInAt':
+      cmp = (a.lastSignInAt ? new Date(a.lastSignInAt).getTime() : 0) - (b.lastSignInAt ? new Date(b.lastSignInAt).getTime() : 0);
+      break;
+  }
+  return dir === 'asc' ? cmp : -cmp;
+}
+
 export function UsersPage() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('email');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -162,8 +192,28 @@ export function UsersPage() {
     }
   }
 
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  }
+
+  function sortIndicator(key: SortKey): string {
+    if (sortKey !== key) return '';
+    return sortDir === 'asc' ? ' ▲' : ' ▼';
+  }
+
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!users) return <LoadingSpinner label="Wird geladen ..." />;
+
+  const query = search.trim().toLowerCase();
+  const filteredUsers = query
+    ? users.filter((u) => (u.email ?? '').toLowerCase().includes(query) || (u.displayName ?? '').toLowerCase().includes(query))
+    : users;
+  const visibleUsers = [...filteredUsers].sort((a, b) => compareUsers(a, b, sortKey, sortDir));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -190,13 +240,29 @@ export function UsersPage() {
         </p>
       </div>
 
+      <input
+        placeholder="Suche nach E-Mail oder Name..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ ...inputStyle, width: '100%', maxWidth: 360 }}
+      />
+
       <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, minWidth: 640 }}>
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: `1px solid ${colors.border}` }}>
-            <th style={{ padding: '6px 8px' }}>Name / E-Mail</th>
-            <th style={{ padding: '6px 8px' }}>Letzter Login</th>
-            <th style={{ padding: '6px 8px' }}>Weine</th>
+            <th style={{ padding: '6px 8px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('email')}>
+              Name / E-Mail{sortIndicator('email')}
+            </th>
+            <th style={{ padding: '6px 8px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('createdAt')}>
+              Erstellt am{sortIndicator('createdAt')}
+            </th>
+            <th style={{ padding: '6px 8px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('lastSignInAt')}>
+              Letzter Login{sortIndicator('lastSignInAt')}
+            </th>
+            <th style={{ padding: '6px 8px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('wineCount')}>
+              Weine{sortIndicator('wineCount')}
+            </th>
             <th style={{ padding: '6px 8px' }}>Status</th>
             <th style={{ padding: '6px 8px' }}></th>
             <th style={{ padding: '6px 8px' }}></th>
@@ -204,7 +270,14 @@ export function UsersPage() {
           </tr>
         </thead>
         <tbody>
-          {users.map((u) => (
+          {visibleUsers.length === 0 && (
+            <tr>
+              <td colSpan={8} style={{ padding: '16px 8px', textAlign: 'center', opacity: 0.6 }}>
+                Keine Nutzer gefunden.
+              </td>
+            </tr>
+          )}
+          {visibleUsers.map((u) => (
             <Fragment key={u.id}>
               <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
                 <td style={{ padding: '6px 8px' }}>
@@ -231,6 +304,7 @@ export function UsersPage() {
                     })()}
                   </div>
                 </td>
+                <td style={{ padding: '6px 8px' }}>{formatDate(u.createdAt)}</td>
                 <td style={{ padding: '6px 8px' }}>{formatDateTime(u.lastSignInAt)}</td>
                 <td style={{ padding: '6px 8px' }}>{u.wineCount}</td>
                 <td style={{ padding: '6px 8px' }}>
@@ -275,7 +349,7 @@ export function UsersPage() {
               </tr>
               {expandedUserId === u.id && (
                 <tr>
-                  <td colSpan={7} style={{ padding: '10px 8px 18px', background: colors.bg }}>
+                  <td colSpan={8} style={{ padding: '10px 8px 18px', background: colors.bg }}>
                     <UserDetailPanel userId={u.id} />
                   </td>
                 </tr>

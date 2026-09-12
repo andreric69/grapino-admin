@@ -1,7 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { cardStyle, colors, inputStyle, primaryBtnStyle, secondaryBtnStyle } from '../theme';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+
+type StatusFilter = 'all' | PaymentRequest['status'];
+type SortField = 'date' | 'amount';
+type SortDir = 'asc' | 'desc';
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'Alle' },
+  { value: 'open', label: 'Offen' },
+  { value: 'paid', label: 'Bezahlt' },
+  { value: 'cancelled', label: 'Storniert' },
+];
+
+function chipStyle(active: boolean) {
+  return {
+    ...secondaryBtnStyle,
+    padding: '5px 11px',
+    fontSize: 12.5,
+    background: active ? colors.accent : 'transparent',
+    color: active ? '#fff' : colors.text,
+    borderColor: active ? colors.accent : colors.border,
+  };
+}
 
 interface PaymentRequest {
   id: string;
@@ -30,6 +52,13 @@ export function PaymentRequestsPage() {
   const [reason, setReason] = useState('');
   const [sending, setSending] = useState(false);
   const [globalAccessFee, setGlobalAccessFee] = useState<number | null>(null);
+
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [sortField, setSortField] = useState<SortField>('date');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   async function load() {
     setError(null);
@@ -104,6 +133,90 @@ export function PaymentRequestsPage() {
     }
   }
 
+  const filteredRequests = useMemo(() => {
+    if (!requests) return [];
+    const q = search.trim().toLowerCase();
+    const filtered = requests.filter((r) => {
+      if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+      if (!q) return true;
+      return (r.email ?? '').toLowerCase().includes(q) || r.reason.toLowerCase().includes(q);
+    });
+    const sorted = [...filtered].sort((a, b) => {
+      const diff =
+        sortField === 'date'
+          ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          : a.amount - b.amount;
+      return sortDir === 'asc' ? diff : -diff;
+    });
+    return sorted;
+  }, [requests, search, statusFilter, sortField, sortDir]);
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+  }
+
+  const visibleOpenIds = useMemo(
+    () => filteredRequests.filter((r) => r.status === 'open').map((r) => r.id),
+    [filteredRequests],
+  );
+  const allVisibleOpenSelected = visibleOpenIds.length > 0 && visibleOpenIds.every((id) => selectedIds.has(id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllVisibleOpen() {
+    setSelectedIds((prev) => {
+      if (allVisibleOpenSelected) {
+        const next = new Set(prev);
+        visibleOpenIds.forEach((id) => next.delete(id));
+        return next;
+      }
+      return new Set([...prev, ...visibleOpenIds]);
+    });
+  }
+
+  async function bulkMarkPaid() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const res = await apiFetch('/api/commerce?resource=payments', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id, status: 'paid' }),
+            });
+            return res.ok;
+          } catch {
+            return false;
+          }
+        }),
+      );
+      const failedCount = results.filter((ok) => !ok).length;
+      await load();
+      if (failedCount > 0) {
+        setError(`${failedCount} von ${ids.length} Zahlungen konnten nicht als bezahlt markiert werden.`);
+      }
+    } finally {
+      setSelectedIds(new Set());
+      setBulkBusy(false);
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -142,11 +255,75 @@ export function PaymentRequestsPage() {
       {error && <p style={{ color: colors.danger }}>{error}</p>}
       {!requests && <LoadingSpinner label="Wird geladen ..." />}
 
+      {requests && (
+        <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input
+            placeholder="Suche nach E-Mail oder Grund ..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={inputStyle}
+          />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => setStatusFilter(f.value)}
+                style={chipStyle(statusFilter === f.value)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, opacity: 0.6 }}>Sortieren:</span>
+            <button type="button" onClick={() => toggleSort('date')} style={chipStyle(sortField === 'date')}>
+              Datum {sortField === 'date' ? (sortDir === 'desc' ? '(neueste zuerst)' : '(älteste zuerst)') : ''}
+            </button>
+            <button type="button" onClick={() => toggleSort('amount')} style={chipStyle(sortField === 'amount')}>
+              Betrag {sortField === 'amount' ? (sortDir === 'desc' ? '(höchster zuerst)' : '(niedrigster zuerst)') : ''}
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px solid ${colors.border}`, paddingTop: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+              <input
+                type="checkbox"
+                checked={allVisibleOpenSelected}
+                disabled={visibleOpenIds.length === 0 || bulkBusy}
+                onChange={toggleSelectAllVisibleOpen}
+              />
+              Alle sichtbaren offenen auswählen
+            </label>
+            <button
+              type="button"
+              disabled={selectedIds.size === 0 || bulkBusy}
+              onClick={bulkMarkPaid}
+              style={primaryBtnStyle}
+            >
+              {bulkBusy ? 'Wird markiert ...' : `Als bezahlt markieren (${selectedIds.size})`}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {requests?.map((r) => (
+        {requests && filteredRequests.length === 0 && (
+          <p style={{ fontSize: 13, opacity: 0.6 }}>Keine Zahlungsanfragen gefunden.</p>
+        )}
+        {filteredRequests.map((r) => (
           <div key={r.id} style={cardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <strong>{r.email ?? 'Unbekannt'}</strong>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                {r.status === 'open' && (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(r.id)}
+                    disabled={bulkBusy}
+                    onChange={() => toggleSelected(r.id)}
+                  />
+                )}
+                <strong>{r.email ?? 'Unbekannt'}</strong>
+              </div>
               <span style={{ fontSize: 12, opacity: 0.6 }}>{new Date(r.created_at).toLocaleString('de-CH')}</span>
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>{r.amount.toFixed(2)} CHF</div>
@@ -158,10 +335,10 @@ export function PaymentRequestsPage() {
             </div>
             {r.status === 'open' && (
               <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                <button type="button" disabled={busyId === r.id} onClick={() => updateStatus(r, 'paid')} style={secondaryBtnStyle}>
+                <button type="button" disabled={busyId === r.id || bulkBusy} onClick={() => updateStatus(r, 'paid')} style={secondaryBtnStyle}>
                   Als bezahlt markieren
                 </button>
-                <button type="button" disabled={busyId === r.id} onClick={() => updateStatus(r, 'cancelled')} style={secondaryBtnStyle}>
+                <button type="button" disabled={busyId === r.id || bulkBusy} onClick={() => updateStatus(r, 'cancelled')} style={secondaryBtnStyle}>
                   Stornieren
                 </button>
               </div>
