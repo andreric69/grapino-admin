@@ -136,6 +136,22 @@ describe('isCostActiveInMonth', () => {
     expect(isCostActiveInMonth(cost, '2026-04')).toBe(false);
     expect(isCostActiveInMonth(cost, '2026-02')).toBe(false);
   });
+
+  it('zaehlt eine beendete "monatlich"e Kosten NICHT mehr nach ihrem Endmonat', () => {
+    const cost = { createdAt: '2026-01-10T00:00:00.000Z', recurrence: 'monatlich', endsAt: '2026-03-20T00:00:00.000Z' };
+    expect(isCostActiveInMonth(cost, '2026-04')).toBe(false);
+    expect(isCostActiveInMonth(cost, '2026-06')).toBe(false);
+  });
+
+  it('zaehlt eine "monatlich"e Kosten mit einem Endmonat in der Zukunft weiterhin ab', () => {
+    const cost = { createdAt: '2026-01-10T00:00:00.000Z', recurrence: 'monatlich', endsAt: '2026-08-20T00:00:00.000Z' };
+    expect(isCostActiveInMonth(cost, '2026-03')).toBe(true);
+  });
+
+  it('zaehlt eine "monatlich"e Kosten noch im Endmonat selbst (inklusive Grenze)', () => {
+    const cost = { createdAt: '2026-01-10T00:00:00.000Z', recurrence: 'monatlich', endsAt: '2026-03-20T00:00:00.000Z' };
+    expect(isCostActiveInMonth(cost, '2026-03')).toBe(true);
+  });
 });
 
 describe('csvEscape', () => {

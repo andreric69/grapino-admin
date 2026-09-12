@@ -12,6 +12,27 @@ interface CostRow {
   amount: number;
   note: string | null;
   recurrence: Recurrence;
+  ends_at: string | null;
+}
+
+// "YYYY-MM-DDTHH:mm:ss..." -> "MM.YYYY", fuer die Kurzanzeige von Start-/
+// Endmonat bei laufenden Kosten.
+function formatMonthDe(iso: string): string {
+  const [year, month] = iso.slice(0, 7).split('-');
+  return `${month}.${year}`;
+}
+
+// <input type="date"> braucht "YYYY-MM-DD", das Backend liefert/erwartet
+// einen vollen ISO-Zeitstempel.
+function isoToDateInput(iso: string | null): string {
+  return iso ? iso.slice(0, 10) : '';
+}
+
+// Ein Enddatum in der Zukunft heisst "laeuft noch, endet spaeter" - erst ab
+// dem Monat NACH dem Endmonat ist der Eintrag wirklich beendet (spiegelt die
+// inklusive "<=" Grenze aus isCostActiveInMonth() im Backend).
+function isEndedCost(endsAt: string): boolean {
+  return endsAt.slice(0, 7) < new Date().toISOString().slice(0, 7);
 }
 
 export function CostsPage() {
@@ -21,6 +42,7 @@ export function CostsPage() {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [recurrence, setRecurrence] = useState<Recurrence>('einmalig');
+  const [endsAt, setEndsAt] = useState('');
   const [sending, setSending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -29,6 +51,7 @@ export function CostsPage() {
   const [editAmount, setEditAmount] = useState('');
   const [editNote, setEditNote] = useState('');
   const [editRecurrence, setEditRecurrence] = useState<Recurrence>('einmalig');
+  const [editEndsAt, setEditEndsAt] = useState('');
 
   async function load() {
     setError(null);
@@ -54,13 +77,20 @@ export function CostsPage() {
       const res = await apiFetch('/api/reports?resource=costs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, amount: parsedAmount, note, recurrence }),
+        body: JSON.stringify({
+          label,
+          amount: parsedAmount,
+          note,
+          recurrence,
+          ends_at: recurrence === 'monatlich' && endsAt ? new Date(endsAt).toISOString() : null,
+        }),
       });
       if (!res.ok) throw new Error();
       setLabel('');
       setAmount('');
       setNote('');
       setRecurrence('einmalig');
+      setEndsAt('');
       await load();
     } catch {
       setError('Eintrag konnte nicht gespeichert werden.');
@@ -75,6 +105,7 @@ export function CostsPage() {
     setEditAmount(String(c.amount));
     setEditNote(c.note ?? '');
     setEditRecurrence(c.recurrence);
+    setEditEndsAt(isoToDateInput(c.ends_at));
   }
 
   async function handleSaveEdit() {
@@ -87,7 +118,14 @@ export function CostsPage() {
       const res = await apiFetch('/api/reports?resource=costs', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editId, label: editLabel, amount: parsedAmount, note: editNote, recurrence: editRecurrence }),
+        body: JSON.stringify({
+          id: editId,
+          label: editLabel,
+          amount: parsedAmount,
+          note: editNote,
+          recurrence: editRecurrence,
+          ends_at: editRecurrence === 'monatlich' && editEndsAt ? new Date(editEndsAt).toISOString() : null,
+        }),
       });
       if (!res.ok) throw new Error();
       setEditId(null);
@@ -137,11 +175,30 @@ export function CostsPage() {
             onChange={(e) => setAmount(e.target.value)}
             style={{ flex: 1, padding: '6px 8px', fontSize: 14 }}
           />
-          <select value={recurrence} onChange={(e) => setRecurrence(e.target.value as Recurrence)} style={{ padding: '6px 8px', fontSize: 14 }}>
+          <select
+            value={recurrence}
+            onChange={(e) => {
+              const next = e.target.value as Recurrence;
+              setRecurrence(next);
+              if (next === 'einmalig') setEndsAt('');
+            }}
+            style={{ padding: '6px 8px', fontSize: 14 }}
+          >
             <option value="einmalig">Einmalig</option>
             <option value="monatlich">Monatlich</option>
           </select>
         </div>
+        {recurrence === 'monatlich' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: colors.textMuted }}>
+            Endet am (optional, leer = läuft weiter)
+            <input
+              type="date"
+              value={endsAt}
+              onChange={(e) => setEndsAt(e.target.value)}
+              style={{ padding: '6px 8px', fontSize: 14 }}
+            />
+          </label>
+        )}
         <input
           placeholder="Notiz (optional)"
           value={note}
@@ -173,11 +230,30 @@ export function CostsPage() {
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} style={{ flex: 2, padding: '6px 8px', fontSize: 14 }} />
                     <input value={editAmount} onChange={(e) => setEditAmount(e.target.value)} style={{ flex: 1, padding: '6px 8px', fontSize: 14 }} />
-                    <select value={editRecurrence} onChange={(e) => setEditRecurrence(e.target.value as Recurrence)} style={{ padding: '6px 8px', fontSize: 14 }}>
+                    <select
+                      value={editRecurrence}
+                      onChange={(e) => {
+                        const next = e.target.value as Recurrence;
+                        setEditRecurrence(next);
+                        if (next === 'einmalig') setEditEndsAt('');
+                      }}
+                      style={{ padding: '6px 8px', fontSize: 14 }}
+                    >
                       <option value="einmalig">Einmalig</option>
                       <option value="monatlich">Monatlich</option>
                     </select>
                   </div>
+                  {editRecurrence === 'monatlich' && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: colors.textMuted }}>
+                      Endet am (optional, leer = läuft weiter)
+                      <input
+                        type="date"
+                        value={editEndsAt}
+                        onChange={(e) => setEditEndsAt(e.target.value)}
+                        style={{ padding: '6px 8px', fontSize: 14 }}
+                      />
+                    </label>
+                  )}
                   <input value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Notiz" style={{ padding: '6px 8px', fontSize: 14 }} />
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button type="button" disabled={busyId === c.id} onClick={handleSaveEdit} style={{ cursor: 'pointer' }}>
@@ -192,7 +268,22 @@ export function CostsPage() {
                 <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #eee', padding: '6px 0', fontSize: 14 }}>
                   <div>
                     <strong>{c.label}</strong>
-                    <span style={{ opacity: 0.6 }}> · {c.recurrence === 'monatlich' ? 'monatlich' : 'einmalig'}</span>
+                    {c.recurrence === 'monatlich' ? (
+                      <span
+                        style={{
+                          marginLeft: 8,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: c.ends_at && isEndedCost(c.ends_at) ? colors.textMuted : colors.success,
+                        }}
+                      >
+                        {c.ends_at
+                          ? `${formatMonthDe(c.created_at)} – ${formatMonthDe(c.ends_at)}`
+                          : `seit ${formatMonthDe(c.created_at)}, laufend`}
+                      </span>
+                    ) : (
+                      <span style={{ opacity: 0.6 }}> · einmalig</span>
+                    )}
                     {c.note && <span style={{ opacity: 0.6 }}> · {c.note}</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

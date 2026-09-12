@@ -405,11 +405,27 @@ async function buildAnalytics(supabase: SupabaseClient) {
  * seinem Erstellungsmonat, ein "einmalig"er nur im eigenen Erstellungsmonat.
  * String-Vergleich auf "YYYY-MM" reicht fuer "ab/vor" wie bei den anderen
  * Monats-Keys hier.
+ *
+ * Optional kann ein "monatlich" laufender Eintrag ein Enddatum (ends_at)
+ * haben - noetig, um ein gekuendigtes Abo sauber zu beenden, ohne die Zeile
+ * zu loeschen (Loeschen wuerde es faelschlich auch aus vergangenen Monaten
+ * entfernen, in denen es tatsaechlich lief, und damit die historische
+ * Buchhaltung verfaelschen). Ist ends_at gesetzt, zaehlt der Eintrag nur bis
+ * einschliesslich dem Endmonat (gleiche inklusive "<=" Logik wie beim
+ * Erstellungsmonat).
  */
-export function isCostActiveInMonth(cost: { createdAt: string; recurrence: string | null }, month: string): boolean {
+export function isCostActiveInMonth(
+  cost: { createdAt: string; recurrence: string | null; endsAt?: string | null },
+  month: string,
+): boolean {
   const createdMonth = monthKeyFromIso(cost.createdAt);
   if (cost.recurrence === 'monatlich') {
-    return createdMonth <= month;
+    if (createdMonth > month) return false;
+    if (cost.endsAt) {
+      const endMonth = monthKeyFromIso(cost.endsAt);
+      return month <= endMonth;
+    }
+    return true;
   }
   return createdMonth === month;
 }
@@ -428,7 +444,7 @@ async function buildMonthlyReport(supabase: SupabaseClient, month: string): Prom
   const [allUsers, paymentsRes, costsRes, incomeRes, scansRes] = await Promise.all([
     listAllUsers(supabase),
     supabase.from('payment_requests').select('amount, paid_at').eq('status', 'paid'),
-    supabase.from('admin_costs').select('amount, created_at, recurrence'),
+    supabase.from('admin_costs').select('amount, created_at, recurrence, ends_at'),
     supabase.from('admin_income').select('amount, created_at'),
     supabase.from('label_recognition_log').select('created_at'),
   ]);
@@ -442,7 +458,7 @@ async function buildMonthlyReport(supabase: SupabaseClient, month: string): Prom
     .reduce((sum, p) => sum + Number(p.amount), 0);
 
   const costsChf = (costsRes.data ?? [])
-    .filter((c) => isCostActiveInMonth({ createdAt: c.created_at, recurrence: c.recurrence }, month))
+    .filter((c) => isCostActiveInMonth({ createdAt: c.created_at, recurrence: c.recurrence, endsAt: c.ends_at }, month))
     .reduce((sum, c) => sum + Number(c.amount), 0);
 
   const incomeChf = (incomeRes.data ?? [])
@@ -532,21 +548,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (req.method === 'GET') {
         const { data, error } = await supabase
           .from('admin_costs')
-          .select('id, created_at, label, amount, note, recurrence')
+          .select('id, created_at, label, amount, note, recurrence, ends_at')
           .order('created_at', { ascending: false });
         if (error) throw error;
         res.status(200).json({ costs: data ?? [] });
         return;
       }
       if (req.method === 'POST') {
-        const { label, amount, note, recurrence } = (req.body ?? {}) as {
+        const { label, amount, note, recurrence, ends_at } = (req.body ?? {}) as {
           label?: string;
           amount?: number;
           note?: string;
           recurrence?: 'einmalig' | 'monatlich';
+          ends_at?: string | null;
         };
         if (!label?.trim() || typeof amount !== 'number' || Number.isNaN(amount)) {
           res.status(400).json({ error: 'label und amount erforderlich.' });
+          return;
+        }
+        if (ends_at !== undefined && ends_at !== null && Number.isNaN(Date.parse(ends_at))) {
+          res.status(400).json({ error: 'ends_at ist kein gueltiges Datum.' });
           return;
         }
         const { error } = await supabase.from('admin_costs').insert({
@@ -554,21 +575,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           amount,
           note: note?.trim() || null,
           recurrence: recurrence === 'monatlich' ? 'monatlich' : 'einmalig',
+          ends_at: ends_at || null,
         });
         if (error) throw error;
         res.status(200).json({ ok: true });
         return;
       }
       if (req.method === 'PATCH') {
-        const { id, label, amount, note, recurrence } = (req.body ?? {}) as {
+        const { id, label, amount, note, recurrence, ends_at } = (req.body ?? {}) as {
           id?: string;
           label?: string;
           amount?: number;
           note?: string;
           recurrence?: 'einmalig' | 'monatlich';
+          ends_at?: string | null;
         };
         if (!id) {
           res.status(400).json({ error: 'id erforderlich.' });
+          return;
+        }
+        if (ends_at !== undefined && ends_at !== null && Number.isNaN(Date.parse(ends_at))) {
+          res.status(400).json({ error: 'ends_at ist kein gueltiges Datum.' });
           return;
         }
         const update: Record<string, unknown> = {};
@@ -576,6 +603,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (typeof amount === 'number' && !Number.isNaN(amount)) update.amount = amount;
         if (note !== undefined) update.note = note?.trim() || null;
         if (recurrence === 'einmalig' || recurrence === 'monatlich') update.recurrence = recurrence;
+        if (ends_at !== undefined) update.ends_at = ends_at || null;
         if (Object.keys(update).length === 0) {
           res.status(400).json({ error: 'Keine Aenderung angegeben.' });
           return;

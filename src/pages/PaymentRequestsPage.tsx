@@ -7,6 +7,16 @@ type StatusFilter = 'all' | PaymentRequest['status'];
 type SortField = 'date' | 'amount';
 type SortDir = 'asc' | 'desc';
 
+// Gleicher Schwellenwert wie findOverduePayments in lib/userAttention.ts (dort
+// fuer die "Nutzer im Blick"-Karte auf der Uebersichtsseite) - "ueberfaellig"
+// soll auf beiden Seiten dasselbe bedeuten.
+const OVERDUE_THRESHOLD_DAYS = 14;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function daysSinceCreated(createdAt: string, now: Date = new Date()): number {
+  return Math.floor((now.getTime() - new Date(createdAt).getTime()) / MS_PER_DAY);
+}
+
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'Alle' },
   { value: 'open', label: 'Offen' },
@@ -310,8 +320,11 @@ export function PaymentRequestsPage() {
         {requests && filteredRequests.length === 0 && (
           <p style={{ fontSize: 13, opacity: 0.6 }}>Keine Zahlungsanfragen gefunden.</p>
         )}
-        {filteredRequests.map((r) => (
-          <div key={r.id} style={cardStyle}>
+        {filteredRequests.map((r) => {
+          const daysOpen = r.status === 'open' ? daysSinceCreated(r.created_at) : 0;
+          const isOverdue = r.status === 'open' && daysOpen > OVERDUE_THRESHOLD_DAYS;
+          return (
+          <div key={r.id} style={isOverdue ? { ...cardStyle, borderLeft: `3px solid ${colors.danger}` } : cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                 {r.status === 'open' && (
@@ -333,6 +346,11 @@ export function PaymentRequestsPage() {
               {r.status === 'paid' && `Bezahlt${r.paid_at ? ' am ' + new Date(r.paid_at).toLocaleDateString('de-CH') : ''}`}
               {r.status === 'cancelled' && 'Storniert'}
             </div>
+            {isOverdue && (
+              <div style={{ fontSize: 12, marginTop: 2, color: colors.danger, fontWeight: 600 }}>
+                Seit {daysOpen} Tagen überfällig
+              </div>
+            )}
             {r.status === 'open' && (
               <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
                 <button type="button" disabled={busyId === r.id || bulkBusy} onClick={() => updateStatus(r, 'paid')} style={secondaryBtnStyle}>
@@ -344,7 +362,8 @@ export function PaymentRequestsPage() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
