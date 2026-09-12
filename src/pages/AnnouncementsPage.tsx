@@ -14,6 +14,7 @@ interface Announcement {
   targetEmail: string | null;
   type: 'news' | 'update';
   repeatEveryDays: number | null;
+  isTakeover: boolean;
 }
 
 interface AnnouncementRow {
@@ -26,6 +27,7 @@ interface AnnouncementRow {
   target_email: string | null;
   type: 'news' | 'update';
   repeat_every_days: number | null;
+  is_takeover: boolean;
 }
 
 interface UserOption {
@@ -43,6 +45,7 @@ export function AnnouncementsPage() {
   const [targetUserId, setTargetUserId] = useState('');
   const [type, setType] = useState<'news' | 'update'>('news');
   const [repeatEveryDays, setRepeatEveryDays] = useState('');
+  const [isTakeover, setIsTakeover] = useState(false);
   const [sending, setSending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -65,6 +68,7 @@ export function AnnouncementsPage() {
         targetEmail: a.target_email,
         type: a.type,
         repeatEveryDays: a.repeat_every_days,
+        isTakeover: a.is_takeover,
       })),
     );
     if (usersRes.ok) {
@@ -92,6 +96,7 @@ export function AnnouncementsPage() {
           targetUserId: targetUserId || null,
           type,
           repeatEveryDays: Number.isFinite(days) && days > 0 ? days : null,
+          isTakeover,
         }),
       });
       if (!res.ok) throw new Error();
@@ -100,6 +105,7 @@ export function AnnouncementsPage() {
       setTargetUserId('');
       setType('news');
       setRepeatEveryDays('');
+      setIsTakeover(false);
       await load();
     } catch {
       setError('Ankündigung konnte nicht erstellt werden.');
@@ -191,6 +197,10 @@ export function AnnouncementsPage() {
             />
           </label>
         </div>
+        <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+          <input type="checkbox" checked={isTakeover} onChange={(e) => setIsTakeover(e.target.checked)} />
+          Als Vollbild-Popup anzeigen (fuer wirklich wichtige Mitteilungen)
+        </label>
         <button
           type="button"
           disabled={sending || !title.trim() || !body.trim()}
@@ -211,6 +221,22 @@ export function AnnouncementsPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <strong>
                 {a.type === 'update' ? '🔄' : '📢'} {a.title}
+                {a.isTakeover && (
+                  <span
+                    style={{
+                      marginLeft: 8,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: colors.danger,
+                      border: `1px solid ${colors.danger}`,
+                      borderRadius: 4,
+                      padding: '1px 6px',
+                      verticalAlign: 'middle',
+                    }}
+                  >
+                    Vollbild
+                  </span>
+                )}
               </strong>
               <span style={{ fontSize: 12, opacity: 0.6 }}>{new Date(a.createdAt).toLocaleString('de-CH')}</span>
             </div>

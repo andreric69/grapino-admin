@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       const { data, error } = await supabase
         .from('announcements')
-        .select('id, created_at, title, body, is_active, target_user_id, type, repeat_every_days')
+        .select('id, created_at, title, body, is_active, target_user_id, type, repeat_every_days, is_takeover')
         .order('created_at', { ascending: false });
       if (error) throw error;
 
@@ -31,12 +31,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      const { title, body, targetUserId, type, repeatEveryDays } = (req.body ?? {}) as {
+      const { title, body, targetUserId, type, repeatEveryDays, isTakeover } = (req.body ?? {}) as {
         title?: string;
         body?: string;
         targetUserId?: string | null;
         type?: 'news' | 'update';
         repeatEveryDays?: number | null;
+        isTakeover?: boolean;
       };
       if (!title?.trim() || !body?.trim()) {
         res.status(400).json({ error: 'title und body erforderlich.' });
@@ -48,6 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         target_user_id: targetUserId || null,
         type: type === 'update' ? 'update' : 'news',
         repeat_every_days: repeatEveryDays && repeatEveryDays > 0 ? repeatEveryDays : null,
+        is_takeover: isTakeover === true,
       });
       if (error) throw error;
       res.status(200).json({ ok: true });
