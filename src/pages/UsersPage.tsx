@@ -20,6 +20,32 @@ interface AdminUser {
 const PAYMENT_STATUS_LABELS: Record<string, string> = { paid: 'bezahlt', open: 'offen', cancelled: 'storniert' };
 const PAYMENT_STATUS_COLORS: Record<string, string> = { paid: colors.success, open: colors.gold, cancelled: colors.textMuted };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type UserSegment = 'power' | 'karteileiche' | null;
+
+const SEGMENT_LABELS: Record<Exclude<UserSegment, null>, string> = {
+  power: 'Power-Nutzer',
+  karteileiche: 'Karteileiche',
+};
+
+// Muted, non-alarming tones - deliberately distinct from colors.danger.
+const SEGMENT_STYLES: Record<Exclude<UserSegment, null>, { background: string; color: string }> = {
+  power: { background: 'rgba(182, 130, 53, 0.16)', color: colors.gold },
+  karteileiche: { background: 'rgba(32, 31, 29, 0.08)', color: colors.textMuted },
+};
+
+function computeSegment(u: AdminUser): UserSegment {
+  const now = Date.now();
+  if (u.wineCount >= 15 && u.lastSignInAt && now - new Date(u.lastSignInAt).getTime() <= 30 * DAY_MS) {
+    return 'power';
+  }
+  if (u.wineCount === 0 && now - new Date(u.createdAt).getTime() > 14 * DAY_MS) {
+    return 'karteileiche';
+  }
+  return null;
+}
+
 function formatDateTime(iso: string | null): string {
   if (!iso) return '-';
   return new Date(iso).toLocaleString('de-CH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -183,7 +209,27 @@ export function UsersPage() {
               <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
                 <td style={{ padding: '6px 8px' }}>
                   {u.displayName && <div style={{ fontWeight: 600 }}>{u.displayName}</div>}
-                  <div style={{ opacity: u.displayName ? 0.6 : 1, fontSize: u.displayName ? 12 : 13.5 }}>{u.email ?? u.id}</div>
+                  <div style={{ opacity: u.displayName ? 0.6 : 1, fontSize: u.displayName ? 12 : 13.5 }}>
+                    {u.email ?? u.id}
+                    {(() => {
+                      const segment = computeSegment(u);
+                      if (!segment) return null;
+                      return (
+                        <span
+                          style={{
+                            marginLeft: 6,
+                            fontSize: 11,
+                            padding: '2px 7px',
+                            borderRadius: 10,
+                            fontWeight: 600,
+                            ...SEGMENT_STYLES[segment],
+                          }}
+                        >
+                          {SEGMENT_LABELS[segment]}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </td>
                 <td style={{ padding: '6px 8px' }}>{formatDateTime(u.lastSignInAt)}</td>
                 <td style={{ padding: '6px 8px' }}>{u.wineCount}</td>

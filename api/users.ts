@@ -99,7 +99,7 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
 
   const [winesRes, announcementsRes, dismissalsRes, feedbackRes, deletionRes, paymentRes, ordersRes, notesRes, accessRes] =
     await Promise.all([
-      supabase.from('wines').select('id, price, is_consumed, is_wishlist').eq('user_id', userId),
+      supabase.from('wines').select('id, name, created_at, price, is_consumed, is_wishlist').eq('user_id', userId),
       supabase
         .from('announcements')
         .select('id, created_at, title, type, target_user_id')
@@ -165,6 +165,11 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
       totalValue: activeWines.reduce((sum, w) => sum + (w.price ?? 0), 0),
       withPrice: activeWines.filter((w) => w.price !== null).length,
     },
+    // Einzelne Weine fuer die Zeitleiste (zusaetzlich zur Aggregat-Statistik
+    // oben, die nicht entfernt wird - anderer Code koennte sich darauf
+    // verlassen). Enthaelt bewusst auch Wunschliste/konsumierte Weine, damit
+    // die Zeitleiste vollstaendig ist.
+    wines: wines.map((w) => ({ id: w.id, name: w.name, created_at: w.created_at, price: w.price, is_consumed: w.is_consumed })),
     announcements,
     feedback: feedbackRes.data ?? [],
     deletionRequests: deletionRes.data ?? [],

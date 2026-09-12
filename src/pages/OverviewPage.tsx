@@ -6,6 +6,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { OrderCard, type Order } from '../components/OrderCard';
 import { MessageCard, type UserMessage } from '../components/MessageCard';
 import { computeFinancialSummary } from '../lib/financials';
+import { findInactiveUsers, findOverduePayments, findTrialsEndingSoon, type AttentionUser } from '../lib/userAttention';
 
 /* Gleiche schlichte Linien-Icons wie auf der Statistik-Seite der Weinapp -
    damit sich Kennzahlen-Kacheln in beiden Apps wiedererkennbar anfühlen. */
@@ -118,6 +119,95 @@ function SectionHeading({ text, count }: { text: string; count: number }) {
   );
 }
 
+function userLabel(u: AttentionUser): string {
+  if (u.displayName && u.email) return `${u.displayName} (${u.email})`;
+  return u.displayName ?? u.email ?? 'Unbekannter Nutzer';
+}
+
+function AttentionGroup({ title, color, rows }: { title: string; color: string; rows: { key: string; label: string; detail: string }[] }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
+        <strong style={{ fontSize: 13 }}>{title}</strong>
+        <span style={{ fontSize: 11, opacity: 0.55 }}>({rows.length})</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {rows.map((r) => (
+          <div key={r.key} style={{ fontSize: 12.5, padding: '5px 9px', borderLeft: `2px solid ${color}`, background: colors.surface, borderRadius: 3 }}>
+            {r.label}
+            <span style={{ opacity: 0.6 }}> · {r.detail}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Drei client-seitig berechnete Kategorien (siehe lib/userAttention.ts) aus
+ * den ohnehin schon geladenen /api/users-Daten - kein zusaetzlicher
+ * API-Aufruf. Damit Andrin nicht selbst die ganze Nutzertabelle nach
+ * Auffaelligkeiten durchsuchen muss: ueberfaellige Zahlungen, bald
+ * ablaufende Testphasen, lange inaktive Nutzer.
+ *
+ * Kein Klick-Durchsprung zu den Nutzerdetails - OverviewPage hat (mangels
+ * Router) keinen Weg, den Tab in DashboardPage zu wechseln, ohne dortige
+ * Navigations-Logik anzufassen. Andrin findet den Nutzer ueber E-Mail/Namen
+ * im "Nutzer"-Tab.
+ */
+function UserAttentionSection({ users }: { users: AttentionUser[] }) {
+  const overdue = findOverduePayments(users);
+  const trialSoon = findTrialsEndingSoon(users);
+  const inactive = findInactiveUsers(users);
+  const total = overdue.length + trialSoon.length + inactive.length;
+
+  return (
+    <div>
+      <SectionHeading text="Nutzer im Blick" count={total} />
+      {total === 0 ? (
+        <p style={{ fontSize: 13, opacity: 0.55, margin: 0 }}>Alles im grünen Bereich - kein Nutzer braucht aktuell besondere Aufmerksamkeit.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {overdue.length > 0 && (
+            <AttentionGroup
+              title="Zahlung überfällig"
+              color={colors.danger}
+              rows={overdue.map(({ user, daysOverdue }) => ({
+                key: user.id,
+                label: userLabel(user),
+                detail: `${user.lastPayment!.reason} · seit ${daysOverdue} Tagen offen`,
+              }))}
+            />
+          )}
+          {trialSoon.length > 0 && (
+            <AttentionGroup
+              title="Testphase läuft bald ab"
+              color={colors.gold}
+              rows={trialSoon.map(({ user, daysUntilEnd }) => ({
+                key: user.id,
+                label: userLabel(user),
+                detail: daysUntilEnd <= 1 ? 'läuft morgen ab' : `läuft in ${daysUntilEnd} Tagen ab`,
+              }))}
+            />
+          )}
+          {inactive.length > 0 && (
+            <AttentionGroup
+              title="Lange inaktiv"
+              color={colors.textMuted}
+              rows={inactive.map(({ user, daysInactive }) => ({
+                key: user.id,
+                label: userLabel(user),
+                detail: daysInactive === null ? 'noch nie eingeloggt' : `seit ${daysInactive} Tagen nicht mehr da`,
+              }))}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Zeigt direkt auf dem Dashboard, was gerade Aufmerksamkeit braucht -
  * ungelesene Nachrichten und offene Auftraege - statt dass man dafuer erst
@@ -126,6 +216,7 @@ function SectionHeading({ text, count }: { text: string; count: number }) {
  */
 export function OverviewPage() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [attentionUsers, setAttentionUsers] = useState<AttentionUser[] | null>(null);
   const [messages, setMessages] = useState<UserMessage[] | null>(null);
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -167,9 +258,7 @@ export function OverviewPage() {
         }
       }
 
-      const users = (
-        (await usersRes.json()) as { users: { isBlocked: boolean; trialEndsAt: string | null }[] }
-      ).users;
+      const users = ((await usersRes.json()) as { users: AttentionUser[] }).users;
       const payments = (
         (await paymentsRes.json()) as { paymentRequests: { amount: number; status: string; paid_at: string | null }[] }
       ).paymentRequests;
@@ -196,6 +285,7 @@ export function OverviewPage() {
         oneTimeCosts: costs.filter((c) => c.recurrence === 'einmalig').reduce((s, c) => s + c.amount, 0),
         profitLoss: financials.profitLoss,
       });
+      setAttentionUsers(users);
       setOrders(ordersData);
       setMessages(messagesData);
     } catch (e) {
@@ -257,7 +347,7 @@ export function OverviewPage() {
       </div>
     );
   }
-  if (!metrics || !messages || !orders) return <LoadingSpinner label="Wird geladen ..." />;
+  if (!metrics || !attentionUsers || !messages || !orders) return <LoadingSpinner label="Wird geladen ..." />;
 
   const unreadMessages = messages.filter((m) => !m.read_at);
   const openOrders = orders.filter((o) => o.status === 'pending' || o.status === 'in_progress');
@@ -280,6 +370,8 @@ export function OverviewPage() {
         <StatCard icon={<CalendarIcon />} label="Fixkosten / Monat" value={`${metrics.monthlyCosts.toFixed(2)} CHF`} />
         <StatCard icon={<ReceiptIcon />} label="Einmalige Kosten" value={`${metrics.oneTimeCosts.toFixed(2)} CHF`} />
       </div>
+
+      <UserAttentionSection users={attentionUsers} />
 
       <div>
         <SectionHeading text="Ungelesene Nachrichten" count={unreadMessages.length} />

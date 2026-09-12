@@ -21,17 +21,104 @@ interface UserDetail {
     customAccessFee: number | null;
   };
   wineStats: { total: number; active: number; totalValue: number; withPrice: number };
+  wines: { id: string; name: string | null; created_at: string; price: number | null; is_consumed: boolean }[];
   announcements: { id: string; created_at: string; title: string; type: string; target_user_id: string | null; seenAt: string | null }[];
   feedback: { id: string; created_at: string; rating: number }[];
   deletionRequests: { id: string; created_at: string; status: string }[];
-  paymentRequests: { id: string; created_at: string; amount: number; reason: string; status: string }[];
+  paymentRequests: { id: string; created_at: string; amount: number; reason: string; status: string; paid_at: string | null }[];
   orders: { id: string; created_at: string; category: string; wine_count: number; estimated_price: number; status: string }[];
   notes: { id: string; created_at: string; note: string }[];
+}
+
+interface TimelineEvent {
+  id: string;
+  at: string;
+  label: string;
+  color: string;
 }
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return '-';
   return new Date(iso).toLocaleString('de-CH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+// Fuehrt alle Ereignisse aus den verschiedenen Quellen zu einer einzigen,
+// chronologisch sortierten Liste zusammen (neuste zuerst). Rein
+// praesentational - liest nur, veraendert keine Daten.
+function buildTimeline(detail: UserDetail): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+
+  events.push({ id: 'account-created', at: detail.profile.createdAt, label: 'Konto erstellt', color: colors.border });
+
+  for (const w of detail.wines) {
+    events.push({
+      id: `wine-${w.id}`,
+      at: w.created_at,
+      label: `Wein hinzugefügt: ${w.name?.trim() || '(ohne Namen)'}`,
+      color: colors.gold,
+    });
+  }
+
+  for (const f of detail.feedback) {
+    events.push({ id: `feedback-${f.id}`, at: f.created_at, label: `Feedback gegeben (${f.rating} Sterne)`, color: colors.accent });
+  }
+
+  for (const d of detail.deletionRequests) {
+    events.push({ id: `deletion-${d.id}`, at: d.created_at, label: `Löschanfrage (${d.status})`, color: colors.danger });
+  }
+
+  for (const p of detail.paymentRequests) {
+    events.push({
+      id: `payment-${p.id}`,
+      at: p.created_at,
+      label: `Zahlungsanfrage: ${p.reason} (${p.status})`,
+      color: colors.text,
+    });
+    if (p.paid_at && p.paid_at !== p.created_at) {
+      events.push({ id: `payment-paid-${p.id}`, at: p.paid_at, label: `Zahlung eingegangen: ${p.reason}`, color: colors.success });
+    }
+  }
+
+  for (const o of detail.orders) {
+    events.push({
+      id: `order-${o.id}`,
+      at: o.created_at,
+      label: `Auftrag: ${o.category} (${o.status})`,
+      color: colors.accentSoftBorder,
+    });
+  }
+
+  for (const n of detail.notes) {
+    events.push({ id: `note-${n.id}`, at: n.created_at, label: `Notiz: ${truncate(n.note, 80)}`, color: colors.textMuted });
+  }
+
+  return events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+}
+
+function TimelineSection({ detail }: { detail: UserDetail }) {
+  const events = buildTimeline(detail);
+
+  if (events.length === 0) {
+    return <div style={{ opacity: 0.55 }}>Keine Ereignisse.</div>;
+  }
+
+  return (
+    <div style={{ maxHeight: 480, overflowY: 'auto', paddingRight: 4 }}>
+      {events.map((e) => (
+        <div key={e.id} style={{ display: 'flex', gap: 10, padding: '6px 0', borderBottom: `1px solid ${colors.border}` }}>
+          <div style={{ flexShrink: 0, width: 9, height: 9, borderRadius: '50%', background: e.color, marginTop: 4 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div>{e.label}</div>
+            <div style={{ opacity: 0.55, fontSize: 11 }}>{formatDateTime(e.at)}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function UserDetailPanel({ userId }: { userId: string }) {
@@ -51,6 +138,8 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [loginLink, setLoginLink] = useState<string | null>(null);
   const [loadingLink, setLoadingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'timeline'>('overview');
 
   async function load() {
     setError(null);
@@ -180,6 +269,42 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: 6, borderBottom: `1px solid ${colors.border}`, marginBottom: -4 }}>
+        {(
+          [
+            ['overview', 'Übersicht'],
+            ['timeline', 'Zeitleiste'],
+          ] as const
+        ).map(([tab, tabLabel]) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            style={{
+              cursor: 'pointer',
+              padding: '7px 12px',
+              fontSize: 13,
+              fontFamily: 'inherit',
+              fontWeight: 600,
+              border: 'none',
+              borderBottom: activeTab === tab ? `2px solid ${colors.accent}` : '2px solid transparent',
+              background: 'transparent',
+              color: activeTab === tab ? colors.accent : colors.textMuted,
+            }}
+          >
+            {tabLabel}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'timeline' && (
+        <div style={cardStyle}>
+          <TimelineSection detail={detail} />
+        </div>
+      )}
+
+      {activeTab === 'overview' && (
+        <>
       <div style={{ ...cardStyle, background: detail.access.isBlocked ? 'rgba(179, 38, 30, 0.06)' : colors.surface }}>
         <div style={{ fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
           Zugang
@@ -378,6 +503,8 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           </button>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }
