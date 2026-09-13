@@ -19,6 +19,7 @@ interface UserDetail {
     trialEndsAt: string | null;
     aiDailyLimit: number | null;
     customAccessFee: number | null;
+    plan: PlanTier;
   };
   wineStats: { total: number; active: number; totalValue: number; withPrice: number };
   wines: { id: string; name: string | null; created_at: string; price: number | null; is_consumed: boolean }[];
@@ -36,6 +37,10 @@ interface TimelineEvent {
   label: string;
   color: string;
 }
+
+type PlanTier = 'basis' | 'pro' | 'ultra';
+
+const PLAN_LABELS: Record<PlanTier, string> = { basis: 'Basis', pro: 'Pro', ultra: 'Ultra' };
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return '-';
@@ -133,6 +138,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [extendDays, setExtendDays] = useState('7');
   const [aiDailyLimit, setAiDailyLimit] = useState('');
   const [customAccessFee, setCustomAccessFee] = useState('');
+  const [plan, setPlan] = useState<PlanTier>('ultra');
   const [savingAccess, setSavingAccess] = useState(false);
 
   const [loginLink, setLoginLink] = useState<string | null>(null);
@@ -155,6 +161,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     setTrialEndsAt(data.access.trialEndsAt ?? '');
     setAiDailyLimit(data.access.aiDailyLimit !== null ? String(data.access.aiDailyLimit) : '');
     setCustomAccessFee(data.access.customAccessFee !== null ? String(data.access.customAccessFee) : '');
+    setPlan(data.access.plan ?? 'ultra');
   }
 
   useEffect(() => {
@@ -162,7 +169,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  async function saveAccess(isBlocked: boolean) {
+  async function saveAccess(isBlocked: boolean, planOverride?: PlanTier) {
     setSavingAccess(true);
     setError(null);
     try {
@@ -178,6 +185,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           trialEndsAt: trialEndsAt || null,
           aiDailyLimit: aiDailyLimit.trim() ? parseInt(aiDailyLimit, 10) : null,
           customAccessFee: customAccessFee.trim() ? parseFloat(customAccessFee.replace(',', '.')) : null,
+          plan: planOverride ?? plan,
         }),
       });
       if (!res.ok) throw new Error();
@@ -402,6 +410,29 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           <button type="button" disabled={savingAccess} onClick={() => saveAccess(detail.access.isBlocked)} style={secondaryBtnStyle}>
             Einstellungen speichern
           </button>
+        </div>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Abo-Stufe</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['basis', 'pro', 'ultra'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              disabled={savingAccess}
+              onClick={() => saveAccess(detail.access.isBlocked, p)}
+              style={{
+                ...secondaryBtnStyle,
+                flex: 1,
+                background: plan === p ? colors.accent : 'transparent',
+                color: plan === p ? '#fff' : colors.text,
+                border: plan === p ? 'none' : secondaryBtnStyle.border,
+              }}
+            >
+              {PLAN_LABELS[p]}
+            </button>
+          ))}
         </div>
       </div>
 

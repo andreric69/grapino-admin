@@ -30,35 +30,88 @@ interface AdminUserRow {
   // die es schon fuer Zugangsgebuehr/Auftraege gibt (Andrin legt fuer ein
   // Abo einfach eine Zahlungsanfrage mit passendem Grund an).
   lastPayment: { reason: string; status: string; createdAt: string } | null;
+  // 3-Stufen-Abomodell der Kunden-App (Basis/Pro/Ultra), gespeichert in
+  // derselben Supabase-DB. Default 'ultra' greift sowohl, wenn die Zeile
+  // fehlt, ALS AUCH, wenn die Spalte selbst noch nicht existiert (Migration
+  // claude weinapp/supabase/user-plan-2026-09-13.sql noch nicht angewendet) -
+  // siehe fetchAllUserAccess()/fetchUserAccess() unten.
+  plan: 'basis' | 'pro' | 'ultra';
 }
 
-interface UserAccessRow {
-  user_id: string;
+type PlanTier = 'basis' | 'pro' | 'ultra';
+
+function isValidPlan(v: unknown): v is PlanTier {
+  return v === 'basis' || v === 'pro' || v === 'ultra';
+}
+
+interface UserAccessFields {
   is_blocked: boolean;
   block_reason: string | null;
   block_amount: number | null;
   trial_ends_at: string | null;
   ai_daily_limit: number | null;
   custom_access_fee: number | null;
+  // Fehlt, wenn die Spalte noch nicht existiert (siehe fetchAllUserAccess/
+  // fetchUserAccess) - Aufrufer muessen trotzdem immer auf 'ultra' zurueckfallen.
+  plan?: PlanTier;
+}
+
+const ACCESS_COLUMNS_WITHOUT_PLAN = 'is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, custom_access_fee';
+
+/**
+ * Erkennt Postgres' "column ... does not exist" fuer eine bestimmte Spalte -
+ * gleiches Muster wie in backup.ts (handleTrashPurge) fuer deleted_at, hier
+ * fuer plan angewendet: die Migration user-plan-2026-09-13.sql laeuft in
+ * einem separaten Repo und wird von Andrin selbst angewendet, dieser Code
+ * muss also sowohl vor als auch nach der Anwendung funktionieren.
+ */
+function isMissingColumnError(e: unknown, column: string): boolean {
+  return new RegExp(`column .*${column}.* does not exist`, 'i').test(errorMessage(e));
+}
+
+/** Laedt user_access fuer ALLE Nutzer, mit Fallback ohne `plan`-Spalte falls die Migration noch nicht lief. */
+async function fetchAllUserAccess(supabase: SupabaseClient): Promise<Map<string, UserAccessFields>> {
+  const withPlan = await supabase.from('user_access').select(`user_id, ${ACCESS_COLUMNS_WITHOUT_PLAN}, plan`);
+  if (!withPlan.error) {
+    return new Map((withPlan.data ?? []).map((a) => [a.user_id as string, a as UserAccessFields]));
+  }
+  if (!isMissingColumnError(withPlan.error, 'plan')) throw withPlan.error;
+
+  const withoutPlan = await supabase.from('user_access').select(`user_id, ${ACCESS_COLUMNS_WITHOUT_PLAN}`);
+  if (withoutPlan.error) throw withoutPlan.error;
+  return new Map((withoutPlan.data ?? []).map((a) => [a.user_id as string, a as UserAccessFields]));
+}
+
+/** Laedt user_access fuer EINEN Nutzer, mit demselben Fallback wie fetchAllUserAccess(). */
+async function fetchUserAccess(supabase: SupabaseClient, userId: string): Promise<UserAccessFields | null> {
+  const withPlan = await supabase
+    .from('user_access')
+    .select(`${ACCESS_COLUMNS_WITHOUT_PLAN}, plan`)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!withPlan.error) return withPlan.data as UserAccessFields | null;
+  if (!isMissingColumnError(withPlan.error, 'plan')) throw withPlan.error;
+
+  const withoutPlan = await supabase.from('user_access').select(ACCESS_COLUMNS_WITHOUT_PLAN).eq('user_id', userId).maybeSingle();
+  if (withoutPlan.error) throw withoutPlan.error;
+  return withoutPlan.data as UserAccessFields | null;
 }
 
 async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminUserRow[]> {
   const allUsers = await listAllUsers(supabase);
 
-  const [winesRes, accessRes, paymentsRes] = await Promise.all([
+  const [winesRes, accessByUser, paymentsRes] = await Promise.all([
     supabase.from('wines').select('user_id'),
-    supabase.from('user_access').select('user_id, is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, custom_access_fee'),
+    fetchAllUserAccess(supabase),
     supabase.from('payment_requests').select('user_id, reason, status, created_at').order('created_at', { ascending: false }),
   ]);
   if (winesRes.error) throw winesRes.error;
-  if (accessRes.error) throw accessRes.error;
   if (paymentsRes.error) throw paymentsRes.error;
 
   const wineCountByUser = new Map<string, number>();
   for (const row of winesRes.data ?? []) {
     wineCountByUser.set(row.user_id, (wineCountByUser.get(row.user_id) ?? 0) + 1);
   }
-  const accessByUser = new Map<string, UserAccessRow>((accessRes.data ?? []).map((a) => [a.user_id, a as UserAccessRow]));
   // Ergebnis ist bereits nach created_at absteigend sortiert (siehe Query
   // oben) - das erste Vorkommen pro Nutzer ist damit automatisch die
   // neuste Zahlungsanfrage.
@@ -88,6 +141,7 @@ async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminU
         aiDailyLimit: access?.ai_daily_limit ?? null,
         customAccessFee: access?.custom_access_fee ?? null,
         lastPayment: lastPaymentByUser.get(u.id) ?? null,
+        plan: access?.plan ?? 'ultra',
       };
     })
     .sort((a, b) => a.email?.localeCompare(b.email ?? '') ?? 0);
@@ -98,7 +152,7 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
   if (userError) throw userError;
   const user = userData.user;
 
-  const [winesRes, announcementsRes, dismissalsRes, feedbackRes, deletionRes, paymentRes, ordersRes, notesRes, accessRes] =
+  const [winesRes, announcementsRes, dismissalsRes, feedbackRes, deletionRes, paymentRes, ordersRes, notesRes, access] =
     await Promise.all([
       supabase.from('wines').select('id, name, created_at, price, is_consumed, is_wishlist').eq('user_id', userId),
       supabase
@@ -124,13 +178,9 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
       supabase.from('admin_user_notes').select('id, created_at, note').eq('user_id', userId).order('created_at', { ascending: false }),
-      supabase
-        .from('user_access')
-        .select('is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, custom_access_fee')
-        .eq('user_id', userId)
-        .maybeSingle(),
+      fetchUserAccess(supabase, userId),
     ]);
-  for (const r of [winesRes, announcementsRes, dismissalsRes, feedbackRes, deletionRes, paymentRes, ordersRes, notesRes, accessRes]) {
+  for (const r of [winesRes, announcementsRes, dismissalsRes, feedbackRes, deletionRes, paymentRes, ordersRes, notesRes]) {
     if (r.error) throw r.error;
   }
 
@@ -153,12 +203,13 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
       bannedUntil: user.banned_until && new Date(user.banned_until) > new Date() ? user.banned_until : null,
     },
     access: {
-      isBlocked: accessRes.data?.is_blocked ?? false,
-      blockReason: accessRes.data?.block_reason ?? null,
-      blockAmount: accessRes.data?.block_amount ?? null,
-      trialEndsAt: accessRes.data?.trial_ends_at ?? null,
-      aiDailyLimit: accessRes.data?.ai_daily_limit ?? null,
-      customAccessFee: accessRes.data?.custom_access_fee ?? null,
+      isBlocked: access?.is_blocked ?? false,
+      blockReason: access?.block_reason ?? null,
+      blockAmount: access?.block_amount ?? null,
+      trialEndsAt: access?.trial_ends_at ?? null,
+      aiDailyLimit: access?.ai_daily_limit ?? null,
+      customAccessFee: access?.custom_access_fee ?? null,
+      plan: access?.plan ?? 'ultra',
     },
     wineStats: {
       total: wines.length,
@@ -214,6 +265,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         trialEndsAt?: string | null;
         aiDailyLimit?: number | null;
         customAccessFee?: number | null;
+        plan?: PlanTier;
       };
 
       if (body.action === 'generateRecoveryLink') {
@@ -260,36 +312,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Vorherigen Stand VOR dem Upsert lesen - nur so laesst sich hinterher
         // erkennen, ob sich is_blocked/trial_ends_at ueberhaupt geaendert haben
         // (ein reines "Speichern"-Klick ohne echte Aenderung soll nicht als
-        // Admin-Aktion geloggt werden). Fehlt die Zeile noch komplett, gelten
-        // dieselben Defaults wie in listUsersWithWineCounts() oben (false/null).
-        const { data: currentAccess } = await supabase
-          .from('user_access')
-          .select('is_blocked, trial_ends_at')
-          .eq('user_id', body.userId)
-          .maybeSingle();
+        // Admin-Aktion geloggt werden). Fehlt die Zeile noch komplett (oder die
+        // plan-Spalte selbst, siehe fetchUserAccess), gelten dieselben Defaults
+        // wie in listUsersWithWineCounts() oben (false/null/'ultra').
+        const currentAccess = await fetchUserAccess(supabase, body.userId);
         const oldIsBlocked = currentAccess?.is_blocked ?? false;
         const oldTrialEndsAt = currentAccess?.trial_ends_at ?? null;
+        const oldPlan: PlanTier = currentAccess?.plan ?? 'ultra';
+        // plan ist optional (nicht jeder setAccess-Aufruf aendert die
+        // Abo-Stufe) - fehlt/ungueltig, bleibt die bisherige Stufe unangetastet
+        // statt versehentlich auf 'ultra' zurueckzufallen.
+        const newPlan: PlanTier = isValidPlan(body.plan) ? body.plan : oldPlan;
 
-        const { error } = await supabase.from('user_access').upsert(
-          {
-            user_id: body.userId,
-            is_blocked: newIsBlocked,
-            block_reason: body.blockReason?.trim() || null,
-            block_amount: typeof body.blockAmount === 'number' && !Number.isNaN(body.blockAmount) ? body.blockAmount : null,
-            trial_ends_at: newTrialEndsAt,
-            ai_daily_limit: aiDailyLimit,
-            custom_access_fee: customAccessFee,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id' },
-        );
+        const upsertRow: Record<string, unknown> = {
+          user_id: body.userId,
+          is_blocked: newIsBlocked,
+          block_reason: body.blockReason?.trim() || null,
+          block_amount: typeof body.blockAmount === 'number' && !Number.isNaN(body.blockAmount) ? body.blockAmount : null,
+          trial_ends_at: newTrialEndsAt,
+          ai_daily_limit: aiDailyLimit,
+          custom_access_fee: customAccessFee,
+          plan: newPlan,
+          updated_at: new Date().toISOString(),
+        };
+        let { error } = await supabase.from('user_access').upsert(upsertRow, { onConflict: 'user_id' });
+        if (error && isMissingColumnError(error, 'plan')) {
+          // Migration noch nicht angewendet - ohne plan-Spalte schreiben statt
+          // die gesamte Zugangs-Aenderung (Block/Testabo/...) daran scheitern
+          // zu lassen.
+          const { plan: _plan, ...rowWithoutPlan } = upsertRow;
+          ({ error } = await supabase.from('user_access').upsert(rowWithoutPlan, { onConflict: 'user_id' }));
+        }
         if (error) throw error;
 
         // Logging ist ein reiner Nebeneffekt (siehe logAdminAction - wirft nie)
         // und darf die eigentliche, bereits erfolgreiche Aenderung nicht mehr
         // beeinflussen. E-Mail nur bei Bedarf nachladen, nicht bei jedem
         // setAccess-Aufruf.
-        if (oldIsBlocked !== newIsBlocked || oldTrialEndsAt !== newTrialEndsAt) {
+        if (oldIsBlocked !== newIsBlocked || oldTrialEndsAt !== newTrialEndsAt || oldPlan !== newPlan) {
           const { data: userData } = await supabase.auth.admin.getUserById(body.userId);
           const email = userData.user?.email ?? null;
           if (oldIsBlocked !== newIsBlocked) {
@@ -297,6 +357,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
           if (oldTrialEndsAt !== newTrialEndsAt) {
             await logAdminAction(supabase, 'trial_extended', newTrialEndsAt ? `bis ${newTrialEndsAt}` : 'entfernt', body.userId);
+          }
+          if (oldPlan !== newPlan) {
+            await logAdminAction(supabase, 'plan_changed', `${oldPlan} -> ${newPlan}`, body.userId);
           }
         }
 

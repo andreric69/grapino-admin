@@ -15,7 +15,22 @@ interface AdminUser {
   isBlocked: boolean;
   trialEndsAt: string | null;
   lastPayment: { reason: string; status: string; createdAt: string } | null;
+  plan: PlanTier;
 }
+
+type PlanTier = 'basis' | 'pro' | 'ultra';
+
+const PLAN_LABELS: Record<PlanTier, string> = { basis: 'Basis', pro: 'Pro', ultra: 'Ultra' };
+
+// Eigene, vom Segment-Badge (power/karteileiche) klar unterscheidbare Farben:
+// bordeaux fuer die hoechste Stufe, damit "Ultra" auf den ersten Blick als
+// Premium erkennbar ist, nicht mit dem goldenen "Power-Nutzer"-Segment
+// verwechselbar.
+const PLAN_STYLES: Record<PlanTier, { background: string; color: string }> = {
+  basis: { background: 'rgba(32, 31, 29, 0.08)', color: colors.textMuted },
+  pro: { background: 'rgba(182, 130, 53, 0.16)', color: colors.gold },
+  ultra: { background: 'rgba(124, 45, 58, 0.14)', color: colors.accent },
+};
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = { paid: 'bezahlt', open: 'offen', cancelled: 'storniert' };
 const PAYMENT_STATUS_COLORS: Record<string, string> = { paid: colors.success, open: colors.gold, cancelled: colors.textMuted };
@@ -284,6 +299,18 @@ export function UsersPage() {
                   {u.displayName && <div style={{ fontWeight: 600 }}>{u.displayName}</div>}
                   <div style={{ opacity: u.displayName ? 0.6 : 1, fontSize: u.displayName ? 12 : 13.5 }}>
                     {u.email ?? u.id}
+                    <span
+                      style={{
+                        marginLeft: 6,
+                        fontSize: 11,
+                        padding: '2px 7px',
+                        borderRadius: 10,
+                        fontWeight: 600,
+                        ...PLAN_STYLES[u.plan],
+                      }}
+                    >
+                      {PLAN_LABELS[u.plan]}
+                    </span>
                     {(() => {
                       const segment = computeSegment(u);
                       if (!segment) return null;
