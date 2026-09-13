@@ -546,6 +546,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    // Produkt-Analytics: wie oft wurde welches Feature benutzt (siehe
+    // supabase/feature-usage-log-2026-09-13.sql in der Weinapp-Datenbank -
+    // dieselbe Supabase-Instanz wie die Weinapp selbst, daher hier direkt
+    // abfragbar). Nur aggregierte Zaehlung pro Ereignisname, kein
+    // durchsuchbares Pro-Nutzer-Profil - siehe Kommentar in der Migration.
+    if (resource === 'feature-usage') {
+      if (req.method !== 'GET') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+      }
+      const { data, error } = await supabase.from('feature_usage_log').select('event_name');
+      if (error) {
+        // PostgREST meldet eine unbekannte Tabelle als PGRST205 - siehe
+        // gleiche Behandlung/Begruendung in api/backup.ts (purge-usage-log),
+        // live gegen die echte Datenbank verifiziert, bevor die Migration lief.
+        if (error.code === 'PGRST205') {
+          res.status(200).json({ counts: [] });
+          return;
+        }
+        throw error;
+      }
+      const counts = new Map<string, number>();
+      for (const row of data ?? []) {
+        counts.set(row.event_name, (counts.get(row.event_name) ?? 0) + 1);
+      }
+      res.status(200).json({
+        counts: Array.from(counts.entries())
+          .map(([eventName, count]) => ({ eventName, count }))
+          .sort((a, b) => b.count - a.count),
+      });
+      return;
+    }
+
     if (resource === 'storage') {
       if (req.method !== 'GET') {
         res.status(405).json({ error: 'Method not allowed' });
@@ -751,7 +784,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(400).json({
       error:
-        'resource ("activity"|"admin-activity"|"costs"|"income"|"storage"|"ai-usage"|"data-quality"|"analytics"|"monthly-report") erforderlich.',
+        'resource ("activity"|"admin-activity"|"feature-usage"|"costs"|"income"|"storage"|"ai-usage"|"data-quality"|"analytics"|"monthly-report") erforderlich.',
     });
   } catch (e) {
     await logError(getSupabaseAdmin(), 'reports', e);

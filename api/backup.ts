@@ -20,6 +20,12 @@ const TRASH_RETENTION_DAYS = 30;
 // Wochen war noch alles gut" als Notfall-Referenz.
 const RETENTION_DAYS = 30;
 
+// Nutzungs-Protokoll (feature_usage_log, Weinapp-Datenbank) - siehe
+// supabase/feature-usage-log-2026-09-13.sql in der Weinapp: reine
+// Produkt-Analytics (welches Feature wie oft genutzt wird), keine
+// unbegrenzte Historie pro Person.
+const USAGE_LOG_RETENTION_DAYS = 120;
+
 // Die wichtigsten, schwer von Hand rekonstruierbaren Tabellen - bewusst
 // NICHT wine_recognition_refs (Vektor-Embeddings, gross, aus den Fotos neu
 // berechenbar) oder admin_error_log (rein operativ, kein Nutzerdaten-Verlust
@@ -167,6 +173,28 @@ async function handleTrashPurge(supabase: SupabaseClient) {
   return { ok: true, purged };
 }
 
+/** Loescht Nutzungs-Protokoll-Eintraege aelter als USAGE_LOG_RETENTION_DAYS - haelt die Tabelle klein, keine unbegrenzte Historie pro Nutzer. */
+async function handleUsageLogPurge(supabase: SupabaseClient) {
+  const cutoff = new Date(Date.now() - USAGE_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { error, count } = await supabase
+    .from('feature_usage_log')
+    .delete({ count: 'exact' })
+    .lt('created_at', cutoff);
+
+  if (error) {
+    // PostgREST meldet eine unbekannte Tabelle als PGRST205 ("Could not find
+    // the table ... in the schema cache") - das ist ein anderer Fehler-Code
+    // als ein fehlender SPALTEN-Name (siehe handleTrashPurge oben, das wird
+    // direkt von Postgres als "column ... does not exist" gemeldet). Live
+    // gegen die echte Datenbank verifiziert, bevor die Migration lief.
+    if (error.code === 'PGRST205') {
+      return { ok: true, purged: 0, note: 'feature_usage_log table not present yet' };
+    }
+    throw error;
+  }
+  return { ok: true, purged: count ?? 0 };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isAuthorizedForBackup(req)) {
     res.status(401).json({ error: 'Nicht angemeldet.' });
@@ -184,6 +212,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (job === 'purge-trash') {
       res.status(200).json(await handleTrashPurge(supabase));
+      return;
+    }
+    if (job === 'purge-usage-log') {
+      res.status(200).json(await handleUsageLogPurge(supabase));
       return;
     }
     res.status(200).json(await handleDailyBackup(supabase));

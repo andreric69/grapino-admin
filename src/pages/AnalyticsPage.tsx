@@ -34,6 +34,30 @@ interface AnalyticsData {
   userGrowthByMonth: UserGrowthMonth[];
   scansByMonth: ScansMonth[];
 }
+interface FeatureUsageCount {
+  eventName: string;
+  count: number;
+}
+
+// Deckt sich mit UsageEvent in der Weinapp (src/lib/usageTracking.ts) - feste,
+// bekannte Liste, daher hier als einfache Uebersetzungstabelle statt
+// dynamisch generiert. Ein unbekannter event_name (z.B. nach spaeterer
+// Erweiterung der Liste, bevor hier nachgezogen wird) faellt auf den rohen
+// Namen zurueck statt zu verschwinden.
+const EVENT_LABELS: Record<string, string> = {
+  page_view_lagerplan: 'Lagerplan geöffnet',
+  page_view_weinjahr_rueckblick: 'Weinjahr-Rückblick geöffnet',
+  page_view_lexikon: 'Nachschlagewerk geöffnet',
+  page_view_entdecken: 'Entdecken geöffnet',
+  page_view_statistik: 'Statistik geöffnet',
+  page_view_drucken: 'Drucken geöffnet',
+  share_geklickt: 'Wein/Rückblick geteilt',
+  textgroesse_geaendert: 'Textgrösse geändert',
+  export_ausgeloest: 'Sammlung heruntergeladen',
+  chatbubble_geoeffnet: 'Kontakt-Chatblase geöffnet',
+  papierkorb_geoeffnet: 'Papierkorb angesehen',
+  papierkorb_wiederhergestellt: 'Wein aus Papierkorb wiederhergestellt',
+};
 
 function formatChf(amount: number): string {
   return amount.toLocaleString('de-CH', { style: 'currency', currency: 'CHF' });
@@ -126,6 +150,21 @@ export function AnalyticsPage() {
   const [exportMonth, setExportMonth] = useState<string>(lastNMonths(1)[0]);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [featureUsage, setFeatureUsage] = useState<FeatureUsageCount[] | null>(null);
+
+  useEffect(() => {
+    // Eigener, unabhaengiger Ladevorgang: ein Fehler hier (z.B. Migration in
+    // der Weinapp-Datenbank noch nicht angewendet) soll die restlichen
+    // Diagramme nicht blockieren - daher kein gemeinsamer Fehlerzustand mit
+    // "load()" unten, einfach still leer bleiben.
+    apiFetch('/api/reports?resource=feature-usage')
+      .then(async (res) => {
+        if (!res.ok) return;
+        const json = (await res.json()) as { counts: FeatureUsageCount[] };
+        setFeatureUsage(json.counts);
+      })
+      .catch(() => {});
+  }, []);
 
   function load() {
     setError(null);
@@ -316,6 +355,29 @@ export function AnalyticsPage() {
             {!hasScans && <EmptyChartNote text="Bisher wurde die KI-Etikett-Erkennung noch nicht genutzt." />}
           </>
         )}
+      </ChartSection>
+
+      <ChartSection title="Feature-Nutzung">
+        {!featureUsage || featureUsage.length === 0 ? (
+          <EmptyChartNote text="Noch keine Nutzungsdaten vorhanden." />
+        ) : (
+          <ResponsiveContainer width="100%" height={Math.max(160, featureUsage.length * 34)}>
+            <BarChart
+              data={featureUsage.map((f) => ({ ...f, label: EVENT_LABELS[f.eventName] ?? f.eventName }))}
+              layout="vertical"
+              margin={{ top: 8, right: 24, left: 8, bottom: 0 }}
+            >
+              <CartesianGrid stroke={colors.border} horizontal={false} />
+              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: colors.textMuted }} />
+              <YAxis type="category" dataKey="label" width={190} tick={{ fontSize: 11.5, fill: colors.text }} />
+              <Tooltip formatter={(value) => [`${value}×`, 'Genutzt']} />
+              <Bar dataKey="count" fill={colors.gold} radius={[0, 3, 3, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+        <p style={{ fontSize: 11.5, opacity: 0.6, margin: '10px 0 0' }}>
+          Zeigt nur, wie oft ein Feature insgesamt benutzt wurde - keine Zuordnung zu einzelnen Personen.
+        </p>
       </ChartSection>
 
       <div>
