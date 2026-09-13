@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { colors } from '../theme';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { UndoToast } from '../components/UndoToast';
+import { useUndoDelete } from '../hooks/useUndoDelete';
 
 interface IncomeRow {
   id: string;
@@ -98,9 +100,7 @@ export function IncomePage() {
     }
   }
 
-  async function handleDelete(i: IncomeRow) {
-    if (!window.confirm(`Eintrag "${i.label}" löschen?`)) return;
-    setBusyId(i.id);
+  const { isHidden, toast, scheduleDelete, undo, dismissToast } = useUndoDelete<IncomeRow>(async (i) => {
     try {
       const res = await apiFetch('/api/reports?resource=income', {
         method: 'DELETE',
@@ -111,12 +111,15 @@ export function IncomePage() {
       await load();
     } catch {
       setError('Löschen fehlgeschlagen.');
-    } finally {
-      setBusyId(null);
     }
+  });
+
+  function handleDelete(i: IncomeRow) {
+    scheduleDelete(i.id, i.label, i);
   }
 
-  const total = income?.reduce((sum, i) => sum + i.amount, 0) ?? 0;
+  const visibleIncome = income?.filter((i) => !isHidden(i.id)) ?? [];
+  const total = visibleIncome.reduce((sum, i) => sum + i.amount, 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -163,11 +166,11 @@ export function IncomePage() {
       {income && (
         <div>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Manuell erfasst: {total.toFixed(2)} CHF</div>
-          {income.length === 0 ? (
+          {visibleIncome.length === 0 ? (
             <p style={{ fontSize: 13, opacity: 0.55, margin: 0 }}>Noch keine manuellen Einnahmen erfasst.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {income.map((i) =>
+              {visibleIncome.map((i) =>
                 editId === i.id ? (
                   <div key={i.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 0', borderBottom: '1px solid #eee' }}>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -197,7 +200,6 @@ export function IncomePage() {
                       </button>
                       <button
                         type="button"
-                        disabled={busyId === i.id}
                         onClick={() => handleDelete(i)}
                         style={{ cursor: 'pointer', color: colors.danger }}
                       >
@@ -210,6 +212,14 @@ export function IncomePage() {
             </div>
           )}
         </div>
+      )}
+
+      {toast && (
+        <UndoToast
+          message={`"${toast.label}" gelöscht. Rückgängig?`}
+          onUndo={() => undo(toast.id)}
+          onDismiss={() => dismissToast(toast.id)}
+        />
       )}
     </div>
   );

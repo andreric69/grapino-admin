@@ -4,11 +4,11 @@ import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logError, errorMessage } from './_health.js';
 
-// Aktivitaets-Feed, Kosten-/Einnahmen-Uebersicht, Speicher-Uebersicht,
-// KI-Nutzung, Datenqualitaets-Check und Analytics/Monatsbericht zusammen in
-// einer Datei - wegen Vercels 12-Funktionen-Limit auf dem Hobby-Plan,
-// ausgewaehlt via
-// ?resource=activity|costs|income|storage|ai-usage|data-quality|analytics|monthly-report.
+// Aktivitaets-Feed, Admin-Aktions-Protokoll, Kosten-/Einnahmen-Uebersicht,
+// Speicher-Uebersicht, KI-Nutzung, Datenqualitaets-Check und Analytics/
+// Monatsbericht zusammen in einer Datei - wegen Vercels 12-Funktionen-Limit
+// auf dem Hobby-Plan, ausgewaehlt via
+// ?resource=activity|admin-activity|costs|income|storage|ai-usage|data-quality|analytics|monthly-report.
 
 const BUCKET = 'wine-photos';
 // Supabase-Speicherlimit fuer den aktuellen Plan (MB) - im Supabase-Dashboard
@@ -526,6 +526,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    // Andrins eigenes Admin-Aktions-Protokoll (Nutzer sperren/entsperren,
+    // Testabo verlaengern, Preise aendern) - siehe api/_activityLog.ts. Nicht
+    // zu verwechseln mit ?resource=activity oben, dem Feed der NUTZER-
+    // Aktivitaet. Bewusst als eigene resource auf diesem bestehenden Bundle
+    // statt einer neuen Vercel-Funktion (Funktionslimit).
+    if (resource === 'admin-activity') {
+      if (req.method !== 'GET') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+      }
+      const { data, error } = await supabase
+        .from('admin_activity_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      res.status(200).json({ entries: data ?? [] });
+      return;
+    }
+
     if (resource === 'storage') {
       if (req.method !== 'GET') {
         res.status(405).json({ error: 'Method not allowed' });
@@ -730,7 +750,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     res.status(400).json({
-      error: 'resource ("activity"|"costs"|"income"|"storage"|"ai-usage"|"data-quality"|"analytics"|"monthly-report") erforderlich.',
+      error:
+        'resource ("activity"|"admin-activity"|"costs"|"income"|"storage"|"ai-usage"|"data-quality"|"analytics"|"monthly-report") erforderlich.',
     });
   } catch (e) {
     await logError(getSupabaseAdmin(), 'reports', e);

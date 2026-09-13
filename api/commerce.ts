@@ -3,6 +3,7 @@ import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logError, errorMessage } from './_health.js';
+import { logAdminAction } from './_activityLog.js';
 
 // Auftraege, Zahlungsanfragen und Preise zusammen in einer Datei - wegen
 // Vercels 12-Funktionen-Limit auf dem Hobby-Plan, ausgewaehlt via
@@ -373,11 +374,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(400).json({ error: 'Mindestens ein gueltiges Preisfeld erforderlich.' });
           return;
         }
+
+        // Alten Stand VOR dem Update lesen, um hinterher genau die Felder zu
+        // benennen, die sich TATSAECHLICH geaendert haben - ein Speichern-Klick
+        // ohne echte Aenderung (z. B. alle Felder unveraendert erneut
+        // abgeschickt) soll nicht als Admin-Aktion geloggt werden.
+        const { data: currentPricing } = await supabase.from('pricing_config').select(PRICING_FIELDS).eq('id', 1).single();
+
         const { error } = await supabase
           .from('pricing_config')
           .update({ ...update, updated_at: new Date().toISOString() })
           .eq('id', 1);
         if (error) throw error;
+
+        const changedFields = Object.keys(update).filter(
+          (field) => !currentPricing || (currentPricing as Record<string, number>)[field] !== update[field],
+        );
+        if (changedFields.length > 0) {
+          await logAdminAction(supabase, 'pricing_changed', changedFields.join(', '));
+        }
+
         res.status(200).json({ ok: true });
         return;
       }

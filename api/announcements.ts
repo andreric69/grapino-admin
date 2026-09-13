@@ -31,10 +31,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      const { title, body, targetUserId, type, repeatEveryDays, isTakeover } = (req.body ?? {}) as {
+      const { title, body, targetUserId, targetUserIds, type, repeatEveryDays, isTakeover } = (req.body ?? {}) as {
         title?: string;
         body?: string;
         targetUserId?: string | null;
+        targetUserIds?: string[];
         type?: 'news' | 'update';
         repeatEveryDays?: number | null;
         isTakeover?: boolean;
@@ -43,13 +44,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).json({ error: 'title und body erforderlich.' });
         return;
       }
-      const { error } = await supabase.from('announcements').insert({
+
+      const base = {
         title: title.trim(),
         body: body.trim(),
-        target_user_id: targetUserId || null,
-        type: type === 'update' ? 'update' : 'news',
+        type: type === 'update' ? ('update' as const) : ('news' as const),
         repeat_every_days: repeatEveryDays && repeatEveryDays > 0 ? repeatEveryDays : null,
         is_takeover: isTakeover === true,
+      };
+
+      // Mehrere gezielte Empfaenger: target_user_id ist eine einzelne nullable FK-Spalte
+      // (keine Array-Spalte, keine Migration dafuer), also eine Zeile pro Nutzer statt
+      // eines Arrays in einer Spalte - aber als EIN Bulk-Insert-Aufruf, nicht N Requests.
+      const ids = Array.isArray(targetUserIds)
+        ? targetUserIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+        : [];
+
+      if (ids.length > 0) {
+        const rows = ids.map((id) => ({ ...base, target_user_id: id }));
+        const { error } = await supabase.from('announcements').insert(rows);
+        if (error) throw error;
+        res.status(200).json({ ok: true, count: rows.length });
+        return;
+      }
+
+      // Rueckwaertskompatibel: altes einzelnes targetUserId (oder gar keins = "alle").
+      const { error } = await supabase.from('announcements').insert({
+        ...base,
+        target_user_id: targetUserId || null,
       });
       if (error) throw error;
       res.status(200).json({ ok: true });

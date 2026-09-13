@@ -3,6 +3,7 @@ import { isAuthorized } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logError, errorMessage } from './_health.js';
+import { logAdminAction } from './_activityLog.js';
 
 // "Deaktivieren" heisst: 10 Jahre gesperrt (Supabase kennt kein permanentes
 // Sperren, nur eine Dauer) - in der Praxis dauerhaft, aber jederzeit ueber
@@ -253,13 +254,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           typeof body.customAccessFee === 'number' && !Number.isNaN(body.customAccessFee) && body.customAccessFee >= 0
             ? body.customAccessFee
             : null;
+        const newIsBlocked = !!body.isBlocked;
+        const newTrialEndsAt = body.trialEndsAt || null;
+
+        // Vorherigen Stand VOR dem Upsert lesen - nur so laesst sich hinterher
+        // erkennen, ob sich is_blocked/trial_ends_at ueberhaupt geaendert haben
+        // (ein reines "Speichern"-Klick ohne echte Aenderung soll nicht als
+        // Admin-Aktion geloggt werden). Fehlt die Zeile noch komplett, gelten
+        // dieselben Defaults wie in listUsersWithWineCounts() oben (false/null).
+        const { data: currentAccess } = await supabase
+          .from('user_access')
+          .select('is_blocked, trial_ends_at')
+          .eq('user_id', body.userId)
+          .maybeSingle();
+        const oldIsBlocked = currentAccess?.is_blocked ?? false;
+        const oldTrialEndsAt = currentAccess?.trial_ends_at ?? null;
+
         const { error } = await supabase.from('user_access').upsert(
           {
             user_id: body.userId,
-            is_blocked: !!body.isBlocked,
+            is_blocked: newIsBlocked,
             block_reason: body.blockReason?.trim() || null,
             block_amount: typeof body.blockAmount === 'number' && !Number.isNaN(body.blockAmount) ? body.blockAmount : null,
-            trial_ends_at: body.trialEndsAt || null,
+            trial_ends_at: newTrialEndsAt,
             ai_daily_limit: aiDailyLimit,
             custom_access_fee: customAccessFee,
             updated_at: new Date().toISOString(),
@@ -267,6 +284,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           { onConflict: 'user_id' },
         );
         if (error) throw error;
+
+        // Logging ist ein reiner Nebeneffekt (siehe logAdminAction - wirft nie)
+        // und darf die eigentliche, bereits erfolgreiche Aenderung nicht mehr
+        // beeinflussen. E-Mail nur bei Bedarf nachladen, nicht bei jedem
+        // setAccess-Aufruf.
+        if (oldIsBlocked !== newIsBlocked || oldTrialEndsAt !== newTrialEndsAt) {
+          const { data: userData } = await supabase.auth.admin.getUserById(body.userId);
+          const email = userData.user?.email ?? null;
+          if (oldIsBlocked !== newIsBlocked) {
+            await logAdminAction(supabase, newIsBlocked ? 'user_blocked' : 'user_unblocked', email, body.userId);
+          }
+          if (oldTrialEndsAt !== newTrialEndsAt) {
+            await logAdminAction(supabase, 'trial_extended', newTrialEndsAt ? `bis ${newTrialEndsAt}` : 'entfernt', body.userId);
+          }
+        }
+
         res.status(200).json({ ok: true });
         return;
       }

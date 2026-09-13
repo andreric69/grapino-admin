@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/apiClient';
 import { colors } from '../theme';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { UndoToast } from '../components/UndoToast';
+import { useUndoDelete } from '../hooks/useUndoDelete';
 
 type Recurrence = 'einmalig' | 'monatlich';
 
@@ -137,9 +139,7 @@ export function CostsPage() {
     }
   }
 
-  async function handleDelete(c: CostRow) {
-    if (!window.confirm(`Eintrag "${c.label}" löschen?`)) return;
-    setBusyId(c.id);
+  const { isHidden, toast, scheduleDelete, undo, dismissToast } = useUndoDelete<CostRow>(async (c) => {
     try {
       const res = await apiFetch('/api/reports?resource=costs', {
         method: 'DELETE',
@@ -150,13 +150,16 @@ export function CostsPage() {
       await load();
     } catch {
       setError('Löschen fehlgeschlagen.');
-    } finally {
-      setBusyId(null);
     }
+  });
+
+  function handleDelete(c: CostRow) {
+    scheduleDelete(c.id, c.label, c);
   }
 
-  const monthlyTotal = costs?.filter((c) => c.recurrence === 'monatlich').reduce((sum, c) => sum + c.amount, 0) ?? 0;
-  const oneTimeTotal = costs?.filter((c) => c.recurrence === 'einmalig').reduce((sum, c) => sum + c.amount, 0) ?? 0;
+  const visibleCosts = costs?.filter((c) => !isHidden(c.id)) ?? [];
+  const monthlyTotal = visibleCosts.filter((c) => c.recurrence === 'monatlich').reduce((sum, c) => sum + c.amount, 0);
+  const oneTimeTotal = visibleCosts.filter((c) => c.recurrence === 'einmalig').reduce((sum, c) => sum + c.amount, 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -224,7 +227,7 @@ export function CostsPage() {
             Monatlich: {monthlyTotal.toFixed(2)} · Einmalig: {oneTimeTotal.toFixed(2)}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {costs.map((c) =>
+            {visibleCosts.map((c) =>
               editId === c.id ? (
                 <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 0', borderBottom: '1px solid #eee' }}>
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -293,7 +296,6 @@ export function CostsPage() {
                     </button>
                     <button
                       type="button"
-                      disabled={busyId === c.id}
                       onClick={() => handleDelete(c)}
                       style={{ cursor: 'pointer', color: colors.danger }}
                     >
@@ -305,6 +307,14 @@ export function CostsPage() {
             )}
           </div>
         </div>
+      )}
+
+      {toast && (
+        <UndoToast
+          message={`"${toast.label}" gelöscht. Rückgängig?`}
+          onUndo={() => undo(toast.id)}
+          onDismiss={() => dismissToast(toast.id)}
+        />
       )}
     </div>
   );
