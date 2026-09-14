@@ -22,9 +22,10 @@ export const fontBody = "'Lora', system-ui, sans-serif";
 
 export const cardStyle: CSSProperties = {
   border: `1px solid ${colors.border}`,
-  borderRadius: 6,
+  borderRadius: 8,
   padding: 14,
   background: colors.surface,
+  boxShadow: '0 1px 2px rgba(32, 31, 29, 0.05)',
 };
 
 export const kickerStyle: CSSProperties = {
@@ -32,6 +33,17 @@ export const kickerStyle: CSSProperties = {
   letterSpacing: '0.1em',
   textTransform: 'uppercase',
   color: colors.gold,
+};
+
+// Fuer Gruppen-Ueberschriften in der Seitenleiste (siehe DashboardPage.tsx) -
+// dieselbe Kicker-Optik wie kickerStyle, nur etwas gedaempfter, da sie nicht
+// wie ein Label ueber echtem Inhalt steht, sondern rein strukturell trennt.
+export const navGroupLabelStyle: CSSProperties = {
+  fontSize: 10.5,
+  letterSpacing: '0.09em',
+  textTransform: 'uppercase',
+  color: colors.textMuted,
+  fontWeight: 600,
 };
 
 export const inputStyle: CSSProperties = {

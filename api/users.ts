@@ -299,26 +299,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(400).json({ error: 'userId erforderlich.' });
           return;
         }
-        // Tageslimit muss eine nicht-negative ganze Zahl sein (0 = KI-Erkennung
-        // fuer diesen Nutzer effektiv deaktiviert) - null bedeutet "globaler
-        // Standard", nicht "0 Scans erlaubt".
-        const aiDailyLimit =
-          typeof body.aiDailyLimit === 'number' && Number.isInteger(body.aiDailyLimit) && body.aiDailyLimit >= 0
-            ? body.aiDailyLimit
-            : null;
-        const newIsBlocked = !!body.isBlocked;
-        const newTrialEndsAt = body.trialEndsAt || null;
 
-        // Vorherigen Stand VOR dem Upsert lesen - nur so laesst sich hinterher
-        // erkennen, ob sich is_blocked/trial_ends_at ueberhaupt geaendert haben
+        // Vorherigen Stand VOR dem Update lesen - einerseits um zu erkennen,
+        // ob sich is_blocked/trial_ends_at/plan ueberhaupt geaendert haben
         // (ein reines "Speichern"-Klick ohne echte Aenderung soll nicht als
-        // Admin-Aktion geloggt werden). Fehlt die Zeile noch komplett (oder die
+        // Admin-Aktion geloggt werden), andererseits als Basis fuer die
+        // Teil-Aktualisierung unten. Fehlt die Zeile noch komplett (oder die
         // plan-Spalte selbst, siehe fetchUserAccess), gelten dieselben Defaults
         // wie in listUsersWithWineCounts() oben (false/null/'ultra').
         const currentAccess = await fetchUserAccess(supabase, body.userId);
         const oldIsBlocked = currentAccess?.is_blocked ?? false;
+        const oldBlockReason = currentAccess?.block_reason ?? null;
+        const oldBlockAmount = currentAccess?.block_amount ?? null;
         const oldTrialEndsAt = currentAccess?.trial_ends_at ?? null;
+        const oldAiDailyLimit = currentAccess?.ai_daily_limit ?? null;
         const oldPlan: PlanTier = currentAccess?.plan ?? 'ultra';
+
+        // Teil-Aktualisierung: ein Feld wird nur veraendert, wenn es im
+        // Request ueberhaupt mitgeschickt wurde ("in body") - sonst bleibt
+        // der bisherige Wert stehen. Noetig, seit Massenaktionen (Nutzerliste,
+        // "X ausgewaehlt") nur EIN Feld pro Aufruf aendern wollen (z. B. nur
+        // blockieren), ohne dabei versehentlich Testphase/KI-Limit/Abo-Stufe
+        // der betroffenen Nutzer auf Standardwerte zurueckzusetzen. Die
+        // Einzelnutzer-Ansicht (UserDetailPanel) schickt weiterhin immer alle
+        // Felder mit - fuer sie aendert sich das Verhalten nicht.
+        const newIsBlocked = 'isBlocked' in body ? !!body.isBlocked : oldIsBlocked;
+        const newBlockReason = 'blockReason' in body ? body.blockReason?.trim() || null : oldBlockReason;
+        const newBlockAmount =
+          'blockAmount' in body
+            ? typeof body.blockAmount === 'number' && !Number.isNaN(body.blockAmount)
+              ? body.blockAmount
+              : null
+            : oldBlockAmount;
+        const newTrialEndsAt = 'trialEndsAt' in body ? body.trialEndsAt || null : oldTrialEndsAt;
+        // Tageslimit muss eine nicht-negative ganze Zahl sein (0 = KI-Erkennung
+        // fuer diesen Nutzer effektiv deaktiviert) - null bedeutet "globaler
+        // Standard", nicht "0 Scans erlaubt".
+        const newAiDailyLimit =
+          'aiDailyLimit' in body
+            ? typeof body.aiDailyLimit === 'number' && Number.isInteger(body.aiDailyLimit) && body.aiDailyLimit >= 0
+              ? body.aiDailyLimit
+              : null
+            : oldAiDailyLimit;
         // plan ist optional (nicht jeder setAccess-Aufruf aendert die
         // Abo-Stufe) - fehlt/ungueltig, bleibt die bisherige Stufe unangetastet
         // statt versehentlich auf 'ultra' zurueckzufallen.
@@ -327,10 +349,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const upsertRow: Record<string, unknown> = {
           user_id: body.userId,
           is_blocked: newIsBlocked,
-          block_reason: body.blockReason?.trim() || null,
-          block_amount: typeof body.blockAmount === 'number' && !Number.isNaN(body.blockAmount) ? body.blockAmount : null,
+          block_reason: newBlockReason,
+          block_amount: newBlockAmount,
           trial_ends_at: newTrialEndsAt,
-          ai_daily_limit: aiDailyLimit,
+          ai_daily_limit: newAiDailyLimit,
           plan: newPlan,
           updated_at: new Date().toISOString(),
         };

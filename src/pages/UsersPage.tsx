@@ -16,6 +16,7 @@ interface AdminUser {
   trialEndsAt: string | null;
   lastPayment: { reason: string; status: string; createdAt: string } | null;
   plan: PlanTier;
+  stripeSubscriptionId: string | null;
 }
 
 type PlanTier = 'basis' | 'pro' | 'ultra';
@@ -34,6 +35,19 @@ const PLAN_STYLES: Record<PlanTier, { background: string; color: string }> = {
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = { paid: 'bezahlt', open: 'offen', cancelled: 'storniert' };
 const PAYMENT_STATUS_COLORS: Record<string, string> = { paid: colors.success, open: colors.gold, cancelled: colors.textMuted };
+
+type PlanFilter = 'all' | PlanTier;
+
+function chipStyle(active: boolean) {
+  return {
+    ...secondaryBtnStyle,
+    padding: '5px 11px',
+    fontSize: 12.5,
+    background: active ? colors.accent : 'transparent',
+    color: active ? '#fff' : colors.text,
+    borderColor: active ? colors.accent : colors.border,
+  };
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -100,6 +114,15 @@ export function UsersPage() {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('email');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [planFilter, setPlanFilter] = useState<PlanFilter>('all');
+  const [unpaidOnly, setUnpaidOnly] = useState(false);
+  const [blockedOnly, setBlockedOnly] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkBlockReason, setBulkBlockReason] = useState('');
+  const [bulkExtendDays, setBulkExtendDays] = useState('7');
+  const [bulkPlan, setBulkPlan] = useState<PlanTier>('basis');
 
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -221,14 +244,127 @@ export function UsersPage() {
     return sortDir === 'asc' ? ' ▲' : ' ▼';
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Setzt bei jedem betroffenen Nutzer NUR die hier uebergebenen Felder -
+  // dank der Teil-Aktualisierung in api/users.ts (setAccess) bleiben Testphase/
+  // KI-Limit/Abo-Stufe der jeweils anderen Nutzer unangetastet, auch wenn sie
+  // sich untereinander unterscheiden.
+  async function runBulkAction(fields: Record<string, unknown>) {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const res = await apiFetch('/api/users', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'setAccess', userId: id, ...fields }),
+            });
+            return res.ok;
+          } catch {
+            return false;
+          }
+        }),
+      );
+      const failedCount = results.filter((ok) => !ok).length;
+      await load();
+      if (failedCount > 0) setError(`${failedCount} von ${ids.length} Aktionen fehlgeschlagen.`);
+    } finally {
+      setSelectedIds(new Set());
+      setBulkBusy(false);
+    }
+  }
+
+  function bulkUnblock() {
+    runBulkAction({ isBlocked: false });
+  }
+
+  function bulkBlock() {
+    if (!bulkBlockReason.trim()) return;
+    runBulkAction({ isBlocked: true, blockReason: bulkBlockReason.trim() });
+    setBulkBlockReason('');
+  }
+
+  // Verlaengert pro Nutzer individuell ab dem SPAETEREN von "heute" und dem
+  // aktuell gesetzten Testabo-Datum - gleiche Logik wie extendTrial() in
+  // UserDetailPanel.tsx, hier nur fuer mehrere Nutzer auf einmal mit je
+  // eigenem Ausgangsdatum.
+  async function bulkExtendTrial() {
+    const days = parseInt(bulkExtendDays, 10);
+    if (!days || days <= 0) return;
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const u = users?.find((x) => x.id === id);
+          const today = new Date();
+          const current = u?.trialEndsAt ? new Date(`${u.trialEndsAt}T00:00:00`) : null;
+          const base = current && current.getTime() > today.getTime() ? current : today;
+          base.setDate(base.getDate() + days);
+          const trialEndsAt = base.toISOString().slice(0, 10);
+          try {
+            const res = await apiFetch('/api/users', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'setAccess', userId: id, trialEndsAt }),
+            });
+            return res.ok;
+          } catch {
+            return false;
+          }
+        }),
+      );
+      const failedCount = results.filter((ok) => !ok).length;
+      await load();
+      if (failedCount > 0) setError(`${failedCount} von ${ids.length} Aktionen fehlgeschlagen.`);
+    } finally {
+      setSelectedIds(new Set());
+      setBulkBusy(false);
+    }
+  }
+
+  function bulkSetPlan() {
+    runBulkAction({ plan: bulkPlan });
+  }
+
   if (error) return <p style={{ color: colors.danger }}>{error}</p>;
   if (!users) return <LoadingSpinner label="Wird geladen ..." />;
 
   const query = search.trim().toLowerCase();
-  const filteredUsers = query
-    ? users.filter((u) => (u.email ?? '').toLowerCase().includes(query) || (u.displayName ?? '').toLowerCase().includes(query))
-    : users;
+  const filteredUsers = users.filter((u) => {
+    if (query && !(u.email ?? '').toLowerCase().includes(query) && !(u.displayName ?? '').toLowerCase().includes(query)) return false;
+    if (planFilter !== 'all' && u.plan !== planFilter) return false;
+    if (unpaidOnly && (u.plan === 'basis' || u.stripeSubscriptionId)) return false;
+    if (blockedOnly && !u.isBlocked) return false;
+    return true;
+  });
   const visibleUsers = [...filteredUsers].sort((a, b) => compareUsers(a, b, sortKey, sortDir));
+  const allVisibleSelected = visibleUsers.length > 0 && visibleUsers.every((u) => selectedIds.has(u.id));
+
+  function toggleSelectAllVisible() {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        visibleUsers.forEach((u) => next.delete(u.id));
+        return next;
+      }
+      return new Set([...prev, ...visibleUsers.map((u) => u.id)]);
+    });
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -255,17 +391,76 @@ export function UsersPage() {
         </p>
       </div>
 
-      <input
-        placeholder="Suche nach E-Mail oder Name..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={{ ...inputStyle, width: '100%', maxWidth: 360 }}
-      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <input
+          placeholder="Suche nach E-Mail oder Name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ ...inputStyle, width: '100%', maxWidth: 360 }}
+        />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, opacity: 0.6 }}>Abo-Stufe:</span>
+          {(['all', 'basis', 'pro', 'ultra'] as const).map((p) => (
+            <button key={p} type="button" onClick={() => setPlanFilter(p)} style={chipStyle(planFilter === p)}>
+              {p === 'all' ? 'Alle' : PLAN_LABELS[p]}
+            </button>
+          ))}
+          <span style={{ width: 1, alignSelf: 'stretch', background: colors.border, margin: '0 4px' }} />
+          <button type="button" onClick={() => setUnpaidOnly((v) => !v)} style={chipStyle(unpaidOnly)}>
+            Kein Stripe-Abo
+          </button>
+          <button type="button" onClick={() => setBlockedOnly((v) => !v)} style={chipStyle(blockedOnly)}>
+            Blockiert
+          </button>
+        </div>
+      </div>
+
+      {selectedIds.size > 0 && (
+        <div style={{ ...cardStyle, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <strong style={{ fontSize: 13 }}>{selectedIds.size} ausgewählt</strong>
+          <button type="button" disabled={bulkBusy} onClick={bulkUnblock} style={secondaryBtnStyle}>
+            Entsperren
+          </button>
+          <input
+            placeholder="Grund fürs Blockieren"
+            value={bulkBlockReason}
+            onChange={(e) => setBulkBlockReason(e.target.value)}
+            style={{ ...inputStyle, width: 160 }}
+          />
+          <button type="button" disabled={bulkBusy || !bulkBlockReason.trim()} onClick={bulkBlock} style={secondaryBtnStyle}>
+            Blockieren
+          </button>
+          <input
+            type="number"
+            min={1}
+            value={bulkExtendDays}
+            onChange={(e) => setBulkExtendDays(e.target.value)}
+            style={{ ...inputStyle, width: 56 }}
+          />
+          <button type="button" disabled={bulkBusy} onClick={bulkExtendTrial} style={secondaryBtnStyle}>
+            Testphase verlängern (Tage)
+          </button>
+          <select value={bulkPlan} onChange={(e) => setBulkPlan(e.target.value as PlanTier)} style={inputStyle}>
+            {(['basis', 'pro', 'ultra'] as const).map((p) => (
+              <option key={p} value={p}>
+                {PLAN_LABELS[p]}
+              </option>
+            ))}
+          </select>
+          <button type="button" disabled={bulkBusy} onClick={bulkSetPlan} style={secondaryBtnStyle}>
+            Abo-Stufe setzen
+          </button>
+          {bulkBusy && <span style={{ fontSize: 12, opacity: 0.6 }}>Wird ausgeführt ...</span>}
+        </div>
+      )}
 
       <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, minWidth: 640 }}>
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: `1px solid ${colors.border}` }}>
+            <th style={{ padding: '6px 8px' }}>
+              <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} disabled={visibleUsers.length === 0} />
+            </th>
             <th style={{ padding: '6px 8px', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('email')}>
               Name / E-Mail{sortIndicator('email')}
             </th>
@@ -287,7 +482,7 @@ export function UsersPage() {
         <tbody>
           {visibleUsers.length === 0 && (
             <tr>
-              <td colSpan={8} style={{ padding: '16px 8px', textAlign: 'center', opacity: 0.6 }}>
+              <td colSpan={9} style={{ padding: '16px 8px', textAlign: 'center', opacity: 0.6 }}>
                 Keine Nutzer gefunden.
               </td>
             </tr>
@@ -295,6 +490,9 @@ export function UsersPage() {
           {visibleUsers.map((u) => (
             <Fragment key={u.id}>
               <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                <td style={{ padding: '6px 8px' }}>
+                  <input type="checkbox" checked={selectedIds.has(u.id)} onChange={() => toggleSelected(u.id)} />
+                </td>
                 <td style={{ padding: '6px 8px' }}>
                   {u.displayName && <div style={{ fontWeight: 600 }}>{u.displayName}</div>}
                   <div style={{ opacity: u.displayName ? 0.6 : 1, fontSize: u.displayName ? 12 : 13.5 }}>
@@ -311,6 +509,14 @@ export function UsersPage() {
                     >
                       {PLAN_LABELS[u.plan]}
                     </span>
+                    {u.plan !== 'basis' && !u.stripeSubscriptionId && (
+                      <span
+                        title="Kein aktives Stripe-Abo hinter dieser Stufe - entweder manuell von dir vergeben, oder noch nie bezahlt (z. B. Bestandskonto von vor der Abo-Einfuehrung)."
+                        style={{ marginLeft: 4, fontSize: 11, opacity: 0.55, cursor: 'help' }}
+                      >
+                        (kein Stripe-Abo)
+                      </span>
+                    )}
                     {(() => {
                       const segment = computeSegment(u);
                       if (!segment) return null;
@@ -376,7 +582,7 @@ export function UsersPage() {
               </tr>
               {expandedUserId === u.id && (
                 <tr>
-                  <td colSpan={8} style={{ padding: '10px 8px 18px', background: colors.bg }}>
+                  <td colSpan={9} style={{ padding: '10px 8px 18px', background: colors.bg }}>
                     <UserDetailPanel userId={u.id} />
                   </td>
                 </tr>

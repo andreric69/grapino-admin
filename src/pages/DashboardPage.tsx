@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { clearToken } from '../lib/apiClient';
-import { colors, fontBody, fontHeading } from '../theme';
+import { colors, fontBody, fontHeading, navGroupLabelStyle } from '../theme';
+import { NavIcon, type NavIconName } from '../components/NavIcon';
 import { UsersPage } from './UsersPage';
 import { DeletionRequestsPage } from './DeletionRequestsPage';
 import { AnnouncementsPage } from './AnnouncementsPage';
@@ -36,24 +37,55 @@ type Tab =
   | 'dataQuality'
   | 'health';
 
-const NAV: { key: Tab; label: string; icon: string }[] = [
-  { key: 'overview', label: 'Übersicht', icon: '\u{1F4CA}' },
-  { key: 'analytics', label: 'Auswertungen', icon: '\u{1F4C9}' },
-  { key: 'users', label: 'Nutzer', icon: '\u{1F464}' },
-  { key: 'deletions', label: 'Löschanfragen', icon: '\u{1F5D1}\u{FE0F}' },
-  { key: 'messages', label: 'Nachrichten', icon: '\u{1F4AC}' },
-  { key: 'payments', label: 'Zahlungen', icon: '\u{1F4B0}' },
-  { key: 'orders', label: 'Aufträge', icon: '\u{1F4CB}' },
-  { key: 'finances', label: 'Finanzen', icon: '\u{1F4B8}' },
-  { key: 'announcements', label: 'Ankündigungen', icon: '\u{1F4E3}' },
-  { key: 'feedback', label: 'Feedback', icon: '\u{2B50}' },
-  { key: 'email', label: 'E-Mail-Vorlagen', icon: '\u{2709}\u{FE0F}' },
-  { key: 'activity', label: 'Aktivität', icon: '\u{1F4C8}' },
-  { key: 'storage', label: 'Speicher', icon: '\u{1F5C3}\u{FE0F}' },
-  { key: 'aiUsage', label: 'KI-Nutzung', icon: '\u{1F916}' },
-  { key: 'dataQuality', label: 'Datenqualität', icon: '\u{1F50E}' },
-  { key: 'health', label: 'Gesundheit', icon: '\u{1FA7A}' },
+// Frueher eine einzige flache Liste von 16 Tabs - kaum mehr ueberschaubar.
+// Jetzt nach Zusammengehoerigkeit gruppiert: was mit Geld zu tun hat steht
+// beisammen, was mit Kommunikation nach aussen zu tun hat auch, technischer
+// Betrieb ("System") ist vom Tagesgeschaeft (Nutzer/Zahlungen) klar getrennt.
+const NAV_GROUPS: { label: string; items: { key: Tab; label: string; icon: NavIconName }[] }[] = [
+  {
+    label: 'Übersicht',
+    items: [
+      { key: 'overview', label: 'Übersicht', icon: 'overview' },
+      { key: 'analytics', label: 'Auswertungen', icon: 'analytics' },
+    ],
+  },
+  {
+    label: 'Nutzer',
+    items: [
+      { key: 'users', label: 'Nutzer', icon: 'users' },
+      { key: 'deletions', label: 'Löschanfragen', icon: 'deletions' },
+    ],
+  },
+  {
+    label: 'Zahlungen & Preise',
+    items: [
+      { key: 'payments', label: 'Zahlungen', icon: 'payments' },
+      { key: 'orders', label: 'Aufträge', icon: 'orders' },
+      { key: 'finances', label: 'Finanzen', icon: 'finances' },
+    ],
+  },
+  {
+    label: 'Kommunikation',
+    items: [
+      { key: 'messages', label: 'Nachrichten', icon: 'messages' },
+      { key: 'announcements', label: 'Ankündigungen', icon: 'announcements' },
+      { key: 'feedback', label: 'Feedback', icon: 'feedback' },
+      { key: 'email', label: 'E-Mail-Vorlagen', icon: 'email' },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { key: 'activity', label: 'Aktivität', icon: 'activity' },
+      { key: 'storage', label: 'Speicher', icon: 'storage' },
+      { key: 'aiUsage', label: 'KI-Nutzung', icon: 'aiUsage' },
+      { key: 'dataQuality', label: 'Datenqualität', icon: 'dataQuality' },
+      { key: 'health', label: 'Gesundheit', icon: 'health' },
+    ],
+  },
 ];
+
+const NAV = NAV_GROUPS.flatMap((g) => g.items);
 
 const MOBILE_BREAKPOINT = '(max-width: 768px)';
 
@@ -88,7 +120,7 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
   const sidebar = (
     <div
       style={{
-        width: isMobile ? '78vw' : 210,
+        width: isMobile ? '78vw' : 226,
         maxWidth: isMobile ? 280 : undefined,
         flexShrink: 0,
         borderRight: `1px solid ${colors.border}`,
@@ -108,8 +140,8 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
           : { position: 'sticky' as const, top: 0, height: '100vh' }),
       }}
     >
-      <div style={{ padding: '18px 16px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontFamily: fontHeading, fontSize: 18, fontWeight: 600, color: colors.accent }}>Grapino Admin</div>
+      <div style={{ padding: '18px 18px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontFamily: fontHeading, fontSize: 19, fontWeight: 600, color: colors.accent }}>Grapino Admin</div>
         {isMobile && (
           <button
             type="button"
@@ -121,32 +153,38 @@ export function DashboardPage({ onLoggedOut }: { onLoggedOut: () => void }) {
           </button>
         )}
       </div>
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 8px' }}>
-        {NAV.map((n) => (
-          <button
-            key={n.key}
-            type="button"
-            onClick={() => selectTab(n.key)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              width: '100%',
-              textAlign: 'left',
-              cursor: 'pointer',
-              padding: '10px 10px',
-              marginBottom: 2,
-              fontSize: 14,
-              border: 'none',
-              borderRadius: 6,
-              background: tab === n.key ? colors.accentSoft : 'transparent',
-              color: tab === n.key ? colors.accent : colors.text,
-              fontWeight: tab === n.key ? 600 : 400,
-            }}
-          >
-            <span style={{ fontSize: 15 }}>{n.icon}</span>
-            {n.label}
-          </button>
+      <nav style={{ flex: 1, overflowY: 'auto', padding: '14px 10px' }}>
+        {NAV_GROUPS.map((group, i) => (
+          <div key={group.label} style={{ marginTop: i === 0 ? 0 : 18 }}>
+            <div style={{ ...navGroupLabelStyle, padding: '0 8px 6px' }}>{group.label}</div>
+            {group.items.map((n) => (
+              <button
+                key={n.key}
+                type="button"
+                onClick={() => selectTab(n.key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 9,
+                  width: '100%',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  padding: '8px 10px',
+                  marginBottom: 2,
+                  fontSize: 14,
+                  fontFamily: fontBody,
+                  border: 'none',
+                  borderRadius: 6,
+                  background: tab === n.key ? colors.accentSoft : 'transparent',
+                  color: tab === n.key ? colors.accent : colors.text,
+                  fontWeight: tab === n.key ? 600 : 400,
+                }}
+              >
+                <NavIcon name={n.icon} />
+                {n.label}
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
       <div style={{ padding: 12, borderTop: `1px solid ${colors.border}` }}>
