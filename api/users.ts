@@ -23,12 +23,13 @@ interface AdminUserRow {
   blockAmount: number | null;
   trialEndsAt: string | null;
   aiDailyLimit: number | null;
-  customAccessFee: number | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
   // Neuste Zahlungsanfrage (unabhaengig vom Status) - fuer eine Ampel in der
-  // Nutzerliste, ohne dass man dafuer erst ins Detail klicken muss. Bewusst
-  // kein eigenes neues "Abo"-Feld/Konzept - nutzt dieselben Zahlungsanfragen,
-  // die es schon fuer Zugangsgebuehr/Auftraege gibt (Andrin legt fuer ein
-  // Abo einfach eine Zahlungsanfrage mit passendem Grund an).
+  // Nutzerliste, ohne dass man dafuer erst ins Detail klicken muss. Betrifft
+  // nur noch Aktualisierungs-Auftraege (TWINT/Ueberweisung von Hand) - der
+  // App-Zugang selbst laeuft ueber Stripe-Abos, siehe plan/stripeCustomerId/
+  // stripeSubscriptionId oben.
   lastPayment: { reason: string; status: string; createdAt: string } | null;
   // 3-Stufen-Abomodell der Kunden-App (Basis/Pro/Ultra), gespeichert in
   // derselben Supabase-DB. Default 'ultra' greift sowohl, wenn die Zeile
@@ -50,13 +51,15 @@ interface UserAccessFields {
   block_amount: number | null;
   trial_ends_at: string | null;
   ai_daily_limit: number | null;
-  custom_access_fee: number | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
   // Fehlt, wenn die Spalte noch nicht existiert (siehe fetchAllUserAccess/
   // fetchUserAccess) - Aufrufer muessen trotzdem immer auf 'ultra' zurueckfallen.
   plan?: PlanTier;
 }
 
-const ACCESS_COLUMNS_WITHOUT_PLAN = 'is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, custom_access_fee';
+const ACCESS_COLUMNS_WITHOUT_PLAN =
+  'is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, stripe_customer_id, stripe_subscription_id';
 
 /**
  * Erkennt Postgres' "column ... does not exist" fuer eine bestimmte Spalte -
@@ -139,7 +142,8 @@ async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminU
         blockAmount: access?.block_amount ?? null,
         trialEndsAt: access?.trial_ends_at ?? null,
         aiDailyLimit: access?.ai_daily_limit ?? null,
-        customAccessFee: access?.custom_access_fee ?? null,
+        stripeCustomerId: access?.stripe_customer_id ?? null,
+        stripeSubscriptionId: access?.stripe_subscription_id ?? null,
         lastPayment: lastPaymentByUser.get(u.id) ?? null,
         plan: access?.plan ?? 'ultra',
       };
@@ -208,7 +212,8 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
       blockAmount: access?.block_amount ?? null,
       trialEndsAt: access?.trial_ends_at ?? null,
       aiDailyLimit: access?.ai_daily_limit ?? null,
-      customAccessFee: access?.custom_access_fee ?? null,
+      stripeCustomerId: access?.stripe_customer_id ?? null,
+      stripeSubscriptionId: access?.stripe_subscription_id ?? null,
       plan: access?.plan ?? 'ultra',
     },
     wineStats: {
@@ -264,7 +269,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         blockAmount?: number | null;
         trialEndsAt?: string | null;
         aiDailyLimit?: number | null;
-        customAccessFee?: number | null;
         plan?: PlanTier;
       };
 
@@ -302,10 +306,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           typeof body.aiDailyLimit === 'number' && Number.isInteger(body.aiDailyLimit) && body.aiDailyLimit >= 0
             ? body.aiDailyLimit
             : null;
-        const customAccessFee =
-          typeof body.customAccessFee === 'number' && !Number.isNaN(body.customAccessFee) && body.customAccessFee >= 0
-            ? body.customAccessFee
-            : null;
         const newIsBlocked = !!body.isBlocked;
         const newTrialEndsAt = body.trialEndsAt || null;
 
@@ -331,7 +331,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           block_amount: typeof body.blockAmount === 'number' && !Number.isNaN(body.blockAmount) ? body.blockAmount : null,
           trial_ends_at: newTrialEndsAt,
           ai_daily_limit: aiDailyLimit,
-          custom_access_fee: customAccessFee,
           plan: newPlan,
           updated_at: new Date().toISOString(),
         };

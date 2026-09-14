@@ -10,9 +10,13 @@ export interface FinancialSummary {
 }
 
 /**
- * Gewinn/Verlust = alle bisher bezahlten Zahlungsanfragen (Zugangsgebuehren +
- * Auftraege) + manuell erfasste Einnahmen, minus einmalige Kosten. Laufende
- * Kosten (monatlich) werden bewusst NICHT in die kumulierte Rechnung
+ * Gewinn/Verlust = alle bisher bezahlten Zahlungsanfragen (Aktualisierungs-
+ * Auftraege) + manuell erfasste Einnahmen, minus einmalige Kosten. Erfasst
+ * NICHT die laufenden Stripe-Abo-Einnahmen - die lassen sich am besten direkt
+ * im Stripe-Dashboard (Zahlungen/Berichte) einsehen, statt sie hier zu
+ * duplizieren.
+ *
+ * Laufende Kosten (monatlich) werden bewusst NICHT in die kumulierte Rechnung
  * eingerechnet - ohne erfasstes Start-/Laufzeit-Datum pro Kostenposten waere
  * eine Hochrechnung reine Spekulation. Stattdessen werden sie separat als
  * "CHF/Monat laufend" angezeigt, damit trotzdem sichtbar ist, was regelmaessig

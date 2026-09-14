@@ -18,7 +18,8 @@ interface UserDetail {
     blockAmount: number | null;
     trialEndsAt: string | null;
     aiDailyLimit: number | null;
-    customAccessFee: number | null;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
     plan: PlanTier;
   };
   wineStats: { total: number; active: number; totalValue: number; withPrice: number };
@@ -41,6 +42,17 @@ interface TimelineEvent {
 type PlanTier = 'basis' | 'pro' | 'ultra';
 
 const PLAN_LABELS: Record<PlanTier, string> = { basis: 'Basis', pro: 'Pro', ultra: 'Ultra' };
+
+// Gleiche Liste wie STRIPE_BLOCK_REASONS in claude weinapp/api/stripe-webhook.ts
+// - rein informativ hier: zeigt an, ob ein aktueller Block vom Webhook
+// automatisch gesetzt wurde (Zahlungsproblem) statt von Andrin von Hand
+// (z. B. Missbrauch), damit vor dem Freischalten klar ist, was den Block
+// eigentlich ausgeloest hat.
+const STRIPE_BLOCK_REASONS = new Set([
+  'Zahlung ausstehend - bitte Zahlungsmethode aktualisieren.',
+  'Abo beendet.',
+  'Die letzte Zahlung ist fehlgeschlagen - bitte Zahlungsmethode pruefen.',
+]);
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return '-';
@@ -137,7 +149,6 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [trialEndsAt, setTrialEndsAt] = useState('');
   const [extendDays, setExtendDays] = useState('7');
   const [aiDailyLimit, setAiDailyLimit] = useState('');
-  const [customAccessFee, setCustomAccessFee] = useState('');
   const [plan, setPlan] = useState<PlanTier>('ultra');
   const [savingAccess, setSavingAccess] = useState(false);
 
@@ -160,7 +171,6 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     setBlockAmount(data.access.blockAmount !== null ? String(data.access.blockAmount) : '');
     setTrialEndsAt(data.access.trialEndsAt ?? '');
     setAiDailyLimit(data.access.aiDailyLimit !== null ? String(data.access.aiDailyLimit) : '');
-    setCustomAccessFee(data.access.customAccessFee !== null ? String(data.access.customAccessFee) : '');
     setPlan(data.access.plan ?? 'ultra');
   }
 
@@ -184,7 +194,6 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           blockAmount: blockAmount.trim() ? parseFloat(blockAmount.replace(',', '.')) : null,
           trialEndsAt: trialEndsAt || null,
           aiDailyLimit: aiDailyLimit.trim() ? parseInt(aiDailyLimit, 10) : null,
-          customAccessFee: customAccessFee.trim() ? parseFloat(customAccessFee.replace(',', '.')) : null,
           plan: planOverride ?? plan,
         }),
       });
@@ -332,7 +341,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           <input
             value={blockReason}
             onChange={(e) => setBlockReason(e.target.value)}
-            placeholder="Grund (z. B. Zugangsgebühr offen)"
+            placeholder="Grund (z. B. Missbrauch)"
             style={inputStyle}
           />
           <div style={{ display: 'flex', gap: 6 }}>
@@ -367,29 +376,23 @@ export function UserDetailPanel({ userId }: { userId: string }) {
               Tage verlängern
             </button>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <div style={{ flex: 1 }}>
-              <input
-                type="number"
-                min={0}
-                value={aiDailyLimit}
-                onChange={(e) => setAiDailyLimit(e.target.value)}
-                placeholder="KI-Tageslimit (leer = Standard 100)"
-                style={{ ...inputStyle, width: '100%' }}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <input
-                value={customAccessFee}
-                onChange={(e) => setCustomAccessFee(e.target.value)}
-                placeholder="Individuelle Zugangsgebühr CHF (leer = Standard)"
-                style={{ ...inputStyle, width: '100%' }}
-              />
-            </div>
-          </div>
+          <input
+            type="number"
+            min={0}
+            value={aiDailyLimit}
+            onChange={(e) => setAiDailyLimit(e.target.value)}
+            placeholder="KI-Tageslimit (leer = Standard 100)"
+            style={{ ...inputStyle, width: '100%' }}
+          />
           <div style={{ fontSize: 11, opacity: 0.55 }}>
-            KI-Tageslimit: 0 deaktiviert die Etikett-Erkennung für diesen Nutzer komplett. Zugangsgebühr ist rein
-            informativ (für Zahlungsanfragen) - wird nirgends automatisch durchgesetzt.
+            KI-Tageslimit: 0 deaktiviert die Etikett-Erkennung für diesen Nutzer komplett.
+            {detail.access.blockReason && STRIPE_BLOCK_REASONS.has(detail.access.blockReason) && (
+              <>
+                {' '}
+                <strong>Dieser Block wurde automatisch von Stripe gesetzt</strong> (Zahlungsproblem) - beim
+                Freischalten wird der Zugang erst wieder gesperrt, wenn Stripe erneut ein Problem meldet.
+              </>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -434,6 +437,34 @@ export function UserDetailPanel({ userId }: { userId: string }) {
             </button>
           ))}
         </div>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Stripe-Abo</div>
+        {detail.access.stripeCustomerId ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5 }}>
+            <div>
+              Kunde:{' '}
+              <a
+                href={`https://dashboard.stripe.com/test/customers/${detail.access.stripeCustomerId}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: colors.accent }}
+              >
+                {detail.access.stripeCustomerId}
+              </a>
+            </div>
+            <div style={{ opacity: 0.75 }}>
+              {detail.access.stripeSubscriptionId ? `Abo: ${detail.access.stripeSubscriptionId}` : 'Kein aktives Abo (Checkout begonnen, aber nicht abgeschlossen, oder gekündigt).'}
+            </div>
+            <div style={{ fontSize: 11, opacity: 0.55 }}>
+              Details, Kündigung oder Rückerstattung direkt im Stripe-Dashboard. Link geht aktuell zum Test-Modus -
+              nach dem Wechsel auf Live-Zahlungen hier den Pfad "/test/" entfernen.
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12.5, opacity: 0.55 }}>Noch kein Stripe-Kunde (kein Checkout begonnen).</div>
+        )}
       </div>
 
       <div style={cardStyle}>

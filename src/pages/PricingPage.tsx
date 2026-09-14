@@ -11,7 +11,6 @@ interface PricingConfig {
   standard_max_price: number;
   ultra_min_price: number;
   ultra_max_price: number;
-  access_fee: number;
   updated_at: string;
 }
 
@@ -63,7 +62,6 @@ export function PricingPage() {
     setDraft({
       ...Object.fromEntries(RATE_FIELDS.map((f) => [f.key, String(data.pricing[f.key])])),
       ...Object.fromEntries(BOUND_FIELDS.map((f) => [f.key, String(data.pricing[f.key])])),
-      access_fee: String(data.pricing.access_fee),
     });
   }
 
@@ -84,11 +82,6 @@ export function PricingPage() {
         }
         body[f.key] = parsed;
       }
-      const accessFeeParsed = parseFloat(draft.access_fee?.replace(',', '.') ?? '');
-      if (Number.isNaN(accessFeeParsed) || accessFeeParsed < 0) {
-        throw new Error('Einmalige Zugangsgebühr: ungültiger Wert.');
-      }
-      body.access_fee = accessFeeParsed;
       const res = await apiFetch('/api/commerce?resource=pricing', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -114,22 +107,12 @@ export function PricingPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 480 }}>
+      <div style={{ ...cardStyle, fontSize: 12, opacity: 0.7 }}>
+        Die Abo-Preise (Basis/Pro/Ultra) werden nicht hier, sondern direkt in Stripe verwaltet (Produkte/Preise) -
+        dort neue Preise anlegen und die Preis-IDs in <code>api/create-checkout-session.ts</code> der Weinapp
+        aktualisieren. Hier unten geht es nur um die Aktualisierungs-Aufträge (Recherche).
+      </div>
       <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div>
-          <label style={{ display: 'block', fontSize: 12.5, opacity: 0.7, marginBottom: 4 }}>
-            Einmalige Zugangsgebühr pro Nutzer (CHF)
-          </label>
-          <input
-            value={draft.access_fee ?? ''}
-            onChange={(e) => setDraft((d) => ({ ...d, access_fee: e.target.value }))}
-            style={{ ...inputStyle, width: '100%' }}
-          />
-          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 2 }}>
-            Wird in der Weinapp im Impressum angezeigt, solange noch keine Zugangsgebühr bezahlt wurde. Kann pro
-            Nutzer in dessen Detailansicht überschrieben werden.
-          </div>
-        </div>
-        <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 12 }} />
         {RATE_FIELDS.map((f) => (
           <div key={f.key}>
             <label style={{ display: 'block', fontSize: 12.5, opacity: 0.7, marginBottom: 4 }}>{f.label}</label>

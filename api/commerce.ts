@@ -10,7 +10,7 @@ import { logAdminAction } from './_activityLog.js';
 // ?resource=orders|payments|pricing.
 
 const PRICING_FIELDS =
-  'refresh_price, neue_weine_price, ultra_price, standard_min_price, standard_max_price, ultra_min_price, ultra_max_price, access_fee, updated_at';
+  'refresh_price, neue_weine_price, ultra_price, standard_min_price, standard_max_price, ultra_min_price, ultra_max_price, updated_at';
 
 // "neue_weine" ist seit dem Auftrag-Dialog-Umbau nicht mehr waehlbar (siehe
 // SELECTABLE_ORDER_CATEGORIES in der Weinapp) - bleibt hier nur noch fuer
@@ -354,7 +354,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'standard_max_price',
           'ultra_min_price',
           'ultra_max_price',
-          'access_fee',
         ];
         const update: Record<string, number> = {};
         for (const field of allowedFields) {

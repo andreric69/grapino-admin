@@ -48,7 +48,6 @@ interface PaymentRequest {
 interface UserOption {
   id: string;
   email: string | null;
-  customAccessFee: number | null;
 }
 
 export function PaymentRequestsPage() {
@@ -61,7 +60,6 @@ export function PaymentRequestsPage() {
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [sending, setSending] = useState(false);
-  const [globalAccessFee, setGlobalAccessFee] = useState<number | null>(null);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -72,10 +70,9 @@ export function PaymentRequestsPage() {
 
   async function load() {
     setError(null);
-    const [reqRes, usersRes, pricingRes] = await Promise.all([
+    const [reqRes, usersRes] = await Promise.all([
       apiFetch('/api/commerce?resource=payments'),
       apiFetch('/api/users'),
-      apiFetch('/api/commerce?resource=pricing'),
     ]);
     if (!reqRes.ok) {
       setError('Zahlungsanfragen konnten nicht geladen werden.');
@@ -87,17 +84,6 @@ export function PaymentRequestsPage() {
       const usersData = (await usersRes.json()) as { users: UserOption[] };
       setUsers(usersData.users);
     }
-    if (pricingRes.ok) {
-      const pricingData = (await pricingRes.json()) as { pricing: { access_fee: number } };
-      setGlobalAccessFee(pricingData.pricing.access_fee);
-    }
-  }
-
-  function useAccessFeeReason() {
-    const user = users.find((u) => u.id === targetUserId);
-    const fee = user?.customAccessFee ?? globalAccessFee;
-    setReason('Zugangsgebühr');
-    if (fee !== null && fee !== undefined) setAmount(fee.toFixed(2));
   }
 
   useEffect(() => {
@@ -232,8 +218,8 @@ export function PaymentRequestsPage() {
       <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong style={{ fontSize: 14 }}>Neue Zahlungsanfrage</strong>
         <div style={{ fontSize: 12, opacity: 0.6 }}>
-          Rein informell - der Nutzer sieht das in der App, bezahlt aber ausserhalb (TWINT/Überweisung). Kein
-          echtes Bezahlsystem.
+          Nur noch für Aktualisierungs-Aufträge (Recherche) - der Nutzer sieht das in der App, bezahlt aber
+          ausserhalb (TWINT/Überweisung). Kein echtes Bezahlsystem. Der App-Zugang selbst läuft über Stripe-Abos.
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <select value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 160 }}>
@@ -246,12 +232,7 @@ export function PaymentRequestsPage() {
           </select>
           <input placeholder="Betrag CHF" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ ...inputStyle, width: 120 }} />
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input placeholder="Grund" value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-          <button type="button" disabled={!targetUserId} onClick={useAccessFeeReason} style={secondaryBtnStyle}>
-            Zugangsgebühr
-          </button>
-        </div>
+        <input placeholder="Grund" value={reason} onChange={(e) => setReason(e.target.value)} style={inputStyle} />
         <button
           type="button"
           disabled={sending || !targetUserId || !amount.trim() || !reason.trim()}

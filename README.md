@@ -5,7 +5,7 @@ Internes Verwaltungs-Tool für die [Grapino](../claude%20weinapp) Weinsammlungs-
 ## Funktionen (Ausbaustufen)
 
 - [x] Login (Admin-Passwort, mit Bremse gegen wiederholtes Falsch-Raten)
-- [x] Nutzerverwaltung (Liste, Sperren/Entsperren, Testphase verlängern, individuelle Zugangsgebühr/KI-Limit)
+- [x] Nutzerverwaltung (Liste, Sperren/Entsperren, Testphase verlängern, Abo-Stufe, KI-Limit, Stripe-Status)
 - [x] Löschanfragen (Nutzer beantragt vollständige Konto-Löschung in der Haupt-App, Admin bestätigt hier erst die tatsächliche Löschung - entfernt dann auch das Login-Konto selbst)
 - [x] News/Ankündigungen (werden in der Haupt-App angezeigt, optional an einzelne Nutzer)
 - [x] Kosten-/Einnahmen-Übersicht inkl. Speicherverbrauch pro Nutzer

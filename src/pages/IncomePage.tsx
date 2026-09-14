@@ -125,8 +125,8 @@ export function IncomePage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <p style={{ fontSize: 12, opacity: 0.6, margin: 0 }}>
         Nur für Einnahmen ausserhalb der App-Zahlungsanfragen (z.B. Bar oder Twint direkt erhalten). Bezahlte
-        Zahlungsanfragen (Zugangsgebühren, Aufträge) zählen automatisch zur Gewinn/Verlust-Übersicht dazu, ohne
-        hier eingetragen werden zu müssen.
+        Zahlungsanfragen (Aktualisierungs-Aufträge) zählen automatisch zur Gewinn/Verlust-Übersicht dazu, ohne hier
+        eingetragen werden zu müssen. Stripe-Abo-Einnahmen laufender Nutzer siehe direkt im Stripe-Dashboard.
       </p>
       <div style={{ border: `1px solid ${colors.border}`, borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <strong style={{ fontSize: 14 }}>Neuer Einnahmen-Eintrag</strong>
