@@ -437,6 +437,11 @@ export function UserDetailPanel({ userId }: { userId: string }) {
             </button>
           ))}
         </div>
+        {plan !== 'basis' && !detail.access.stripeSubscriptionId && (
+          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 6 }}>
+            Kein aktives Stripe-Abo hinter dieser Stufe - manuell vergeben oder nie bezahlt (siehe "Stripe-Abo" unten).
+          </div>
+        )}
       </div>
 
       <div style={cardStyle}>

@@ -33,6 +33,22 @@ const PLAN_STYLES: Record<PlanTier, { background: string; color: string }> = {
   ultra: { background: 'rgba(124, 45, 58, 0.14)', color: colors.accent },
 };
 
+// Die farbige Premium-Optik (gold/bordeaux) ist bewusst NUR fuer eine Stufe
+// reserviert, die tatsaechlich durch ein aktives Stripe-Abo gedeckt ist - alles
+// andere (manuell vergeben, oder ein Bestandskonto von vor der Abo-Einfuehrung,
+// das nie ein Abo hatte) bekommt dieselbe neutral-graue Optik wie "Basis" plus
+// einen erklaerenden Zusatz IM Badge selbst statt einer leicht zu uebersehenden
+// Randnotiz. Vorher stand z. B. bei Thomas ein knalliges "Ultra"-Abzeichen, das
+// wie ein zahlender Premium-Kunde aussah, obwohl er nie ein Abo abgeschlossen
+// hat - auf den ersten Blick nicht von einem echten Ultra-Abonnenten zu
+// unterscheiden.
+function planBadge(u: Pick<AdminUser, 'plan' | 'stripeSubscriptionId'>): { label: string; background: string; color: string } {
+  if (u.plan === 'basis' || u.stripeSubscriptionId) {
+    return { label: PLAN_LABELS[u.plan], ...PLAN_STYLES[u.plan] };
+  }
+  return { label: `${PLAN_LABELS[u.plan]} · kein Abo`, ...PLAN_STYLES.basis };
+}
+
 const PAYMENT_STATUS_LABELS: Record<string, string> = { paid: 'bezahlt', open: 'offen', cancelled: 'storniert' };
 const PAYMENT_STATUS_COLORS: Record<string, string> = { paid: colors.success, open: colors.gold, cancelled: colors.textMuted };
 
@@ -497,26 +513,31 @@ export function UsersPage() {
                   {u.displayName && <div style={{ fontWeight: 600 }}>{u.displayName}</div>}
                   <div style={{ opacity: u.displayName ? 0.6 : 1, fontSize: u.displayName ? 12 : 13.5 }}>
                     {u.email ?? u.id}
-                    <span
-                      style={{
-                        marginLeft: 6,
-                        fontSize: 11,
-                        padding: '2px 7px',
-                        borderRadius: 10,
-                        fontWeight: 600,
-                        ...PLAN_STYLES[u.plan],
-                      }}
-                    >
-                      {PLAN_LABELS[u.plan]}
-                    </span>
-                    {u.plan !== 'basis' && !u.stripeSubscriptionId && (
-                      <span
-                        title="Kein aktives Stripe-Abo hinter dieser Stufe - entweder manuell von dir vergeben, oder noch nie bezahlt (z. B. Bestandskonto von vor der Abo-Einfuehrung)."
-                        style={{ marginLeft: 4, fontSize: 11, opacity: 0.55, cursor: 'help' }}
-                      >
-                        (kein Stripe-Abo)
-                      </span>
-                    )}
+                    {(() => {
+                      const badge = planBadge(u);
+                      const isUnpaid = u.plan !== 'basis' && !u.stripeSubscriptionId;
+                      return (
+                        <span
+                          title={
+                            isUnpaid
+                              ? 'Kein aktives Stripe-Abo hinter dieser Stufe - entweder manuell von dir vergeben, oder nie bezahlt (z. B. Bestandskonto von vor der Abo-Einfuehrung).'
+                              : undefined
+                          }
+                          style={{
+                            marginLeft: 6,
+                            fontSize: 11,
+                            padding: '2px 7px',
+                            borderRadius: 10,
+                            fontWeight: 600,
+                            background: badge.background,
+                            color: badge.color,
+                            cursor: isUnpaid ? 'help' : undefined,
+                          }}
+                        >
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                     {(() => {
                       const segment = computeSegment(u);
                       if (!segment) return null;
