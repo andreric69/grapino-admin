@@ -37,6 +37,10 @@ interface AdminUserRow {
   // claude weinapp/supabase/user-plan-2026-09-13.sql noch nicht angewendet) -
   // siehe fetchAllUserAccess()/fetchUserAccess() unten.
   plan: 'basis' | 'pro' | 'ultra';
+  // Von Andrin manuell bestaetigt: ausserhalb Stripe bezahlt (bar/TWINT,
+  // typischerweise Bestandskonten von vor der Abo-Einfuehrung). Siehe
+  // supabase/user-access-paid-outside-stripe-2026-09-14.sql in der Weinapp.
+  paidOutsideStripe: boolean;
 }
 
 type PlanTier = 'basis' | 'pro' | 'ultra';
@@ -53,51 +57,66 @@ interface UserAccessFields {
   ai_daily_limit: number | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
-  // Fehlt, wenn die Spalte noch nicht existiert (siehe fetchAllUserAccess/
-  // fetchUserAccess) - Aufrufer muessen trotzdem immer auf 'ultra' zurueckfallen.
+  // Beide fehlen, wenn die jeweilige Spalte noch nicht existiert (siehe
+  // fetchAllUserAccess/fetchUserAccess) - Aufrufer muessen trotzdem immer auf
+  // 'ultra'/false zurueckfallen.
   plan?: PlanTier;
+  paid_outside_stripe?: boolean;
 }
 
-const ACCESS_COLUMNS_WITHOUT_PLAN =
-  'is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, stripe_customer_id, stripe_subscription_id';
+const BASE_ACCESS_COLUMNS = 'is_blocked, block_reason, block_amount, trial_ends_at, ai_daily_limit, stripe_customer_id, stripe_subscription_id';
+// Spalten, die in separaten, spaeter hinzugekommenen Migrationen entstanden
+// sind und deshalb (unabhaengig voneinander) noch fehlen koennen, bis Andrin
+// die jeweilige Migration im Supabase SQL Editor ausgefuehrt hat.
+const OPTIONAL_ACCESS_COLUMNS = ['plan', 'paid_outside_stripe'] as const;
 
 /**
  * Erkennt Postgres' "column ... does not exist" fuer eine bestimmte Spalte -
- * gleiches Muster wie in backup.ts (handleTrashPurge) fuer deleted_at, hier
- * fuer plan angewendet: die Migration user-plan-2026-09-13.sql laeuft in
- * einem separaten Repo und wird von Andrin selbst angewendet, dieser Code
- * muss also sowohl vor als auch nach der Anwendung funktionieren.
+ * gleiches Muster wie in backup.ts (handleTrashPurge) fuer deleted_at.
  */
 function isMissingColumnError(e: unknown, column: string): boolean {
   return new RegExp(`column .*${column}.* does not exist`, 'i').test(errorMessage(e));
 }
 
-/** Laedt user_access fuer ALLE Nutzer, mit Fallback ohne `plan`-Spalte falls die Migration noch nicht lief. */
-async function fetchAllUserAccess(supabase: SupabaseClient): Promise<Map<string, UserAccessFields>> {
-  const withPlan = await supabase.from('user_access').select(`user_id, ${ACCESS_COLUMNS_WITHOUT_PLAN}, plan`);
-  if (!withPlan.error) {
-    return new Map((withPlan.data ?? []).map((a) => [a.user_id as string, a as UserAccessFields]));
+/**
+ * Fuehrt eine user_access-Abfrage aus und laesst dabei jede optionale Spalte
+ * (siehe OPTIONAL_ACCESS_COLUMNS) weg, deren Migration noch nicht lief -
+ * probiert erst mit allen, entfernt bei einem "column does not exist"-Fehler
+ * genau die betroffene Spalte und versucht es erneut, bis es klappt oder ein
+ * andersartiger Fehler auftritt. So funktioniert der Code unabhaengig davon,
+ * welche der beiden (unabhaengig voneinander deploybaren) Migrationen Andrin
+ * schon angewendet hat.
+ */
+async function selectWithOptionalColumns<T>(
+  runQuery: (columns: string) => Promise<{ data: T; error: unknown }>,
+  baseColumns: string,
+): Promise<T> {
+  let optional: string[] = [...OPTIONAL_ACCESS_COLUMNS];
+  for (;;) {
+    const columns = [baseColumns, ...optional].join(', ');
+    const { data, error } = await runQuery(columns);
+    if (!error) return data;
+    const missingIndex = optional.findIndex((col) => isMissingColumnError(error, col));
+    if (missingIndex === -1) throw error;
+    optional = optional.filter((_, i) => i !== missingIndex);
   }
-  if (!isMissingColumnError(withPlan.error, 'plan')) throw withPlan.error;
+}
 
-  const withoutPlan = await supabase.from('user_access').select(`user_id, ${ACCESS_COLUMNS_WITHOUT_PLAN}`);
-  if (withoutPlan.error) throw withoutPlan.error;
-  return new Map((withoutPlan.data ?? []).map((a) => [a.user_id as string, a as UserAccessFields]));
+/** Laedt user_access fuer ALLE Nutzer, mit Fallback ohne noch fehlende optionale Spalten. */
+async function fetchAllUserAccess(supabase: SupabaseClient): Promise<Map<string, UserAccessFields>> {
+  const data = await selectWithOptionalColumns(
+    (columns) => supabase.from('user_access').select(`user_id, ${columns}`),
+    BASE_ACCESS_COLUMNS,
+  );
+  return new Map((data ?? []).map((a: Record<string, unknown>) => [a.user_id as string, a as UserAccessFields]));
 }
 
 /** Laedt user_access fuer EINEN Nutzer, mit demselben Fallback wie fetchAllUserAccess(). */
 async function fetchUserAccess(supabase: SupabaseClient, userId: string): Promise<UserAccessFields | null> {
-  const withPlan = await supabase
-    .from('user_access')
-    .select(`${ACCESS_COLUMNS_WITHOUT_PLAN}, plan`)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (!withPlan.error) return withPlan.data as UserAccessFields | null;
-  if (!isMissingColumnError(withPlan.error, 'plan')) throw withPlan.error;
-
-  const withoutPlan = await supabase.from('user_access').select(ACCESS_COLUMNS_WITHOUT_PLAN).eq('user_id', userId).maybeSingle();
-  if (withoutPlan.error) throw withoutPlan.error;
-  return withoutPlan.data as UserAccessFields | null;
+  return selectWithOptionalColumns(
+    (columns) => supabase.from('user_access').select(columns).eq('user_id', userId).maybeSingle(),
+    BASE_ACCESS_COLUMNS,
+  ) as Promise<UserAccessFields | null>;
 }
 
 async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminUserRow[]> {
@@ -146,6 +165,7 @@ async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminU
         stripeSubscriptionId: access?.stripe_subscription_id ?? null,
         lastPayment: lastPaymentByUser.get(u.id) ?? null,
         plan: access?.plan ?? 'ultra',
+        paidOutsideStripe: access?.paid_outside_stripe ?? false,
       };
     })
     .sort((a, b) => a.email?.localeCompare(b.email ?? '') ?? 0);
@@ -215,6 +235,7 @@ async function getUserDetail(supabase: SupabaseClient, userId: string) {
       stripeCustomerId: access?.stripe_customer_id ?? null,
       stripeSubscriptionId: access?.stripe_subscription_id ?? null,
       plan: access?.plan ?? 'ultra',
+      paidOutsideStripe: access?.paid_outside_stripe ?? false,
     },
     wineStats: {
       total: wines.length,
@@ -270,6 +291,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         trialEndsAt?: string | null;
         aiDailyLimit?: number | null;
         plan?: PlanTier;
+        paidOutsideStripe?: boolean;
       };
 
       if (body.action === 'generateRecoveryLink') {
@@ -314,6 +336,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const oldTrialEndsAt = currentAccess?.trial_ends_at ?? null;
         const oldAiDailyLimit = currentAccess?.ai_daily_limit ?? null;
         const oldPlan: PlanTier = currentAccess?.plan ?? 'ultra';
+        const oldPaidOutsideStripe = currentAccess?.paid_outside_stripe ?? false;
 
         // Teil-Aktualisierung: ein Feld wird nur veraendert, wenn es im
         // Request ueberhaupt mitgeschickt wurde ("in body") - sonst bleibt
@@ -345,6 +368,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Abo-Stufe) - fehlt/ungueltig, bleibt die bisherige Stufe unangetastet
         // statt versehentlich auf 'ultra' zurueckzufallen.
         const newPlan: PlanTier = isValidPlan(body.plan) ? body.plan : oldPlan;
+        const newPaidOutsideStripe = 'paidOutsideStripe' in body ? !!body.paidOutsideStripe : oldPaidOutsideStripe;
 
         const upsertRow: Record<string, unknown> = {
           user_id: body.userId,
@@ -354,23 +378,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           trial_ends_at: newTrialEndsAt,
           ai_daily_limit: newAiDailyLimit,
           plan: newPlan,
+          paid_outside_stripe: newPaidOutsideStripe,
           updated_at: new Date().toISOString(),
         };
-        let { error } = await supabase.from('user_access').upsert(upsertRow, { onConflict: 'user_id' });
-        if (error && isMissingColumnError(error, 'plan')) {
-          // Migration noch nicht angewendet - ohne plan-Spalte schreiben statt
-          // die gesamte Zugangs-Aenderung (Block/Testabo/...) daran scheitern
-          // zu lassen.
-          const { plan: _plan, ...rowWithoutPlan } = upsertRow;
-          ({ error } = await supabase.from('user_access').upsert(rowWithoutPlan, { onConflict: 'user_id' }));
+        // Analog zu selectWithOptionalColumns() oben, nur fuers Schreiben:
+        // faellt der Upsert an einer noch fehlenden optionalen Spalte (siehe
+        // OPTIONAL_ACCESS_COLUMNS), wird genau diese entfernt und erneut
+        // versucht - so scheitert die gesamte Zugangs-Aenderung (Block/
+        // Testabo/...) nicht an einer einzelnen, noch ausstehenden Migration.
+        let candidateRow = upsertRow;
+        let error: unknown = null;
+        for (;;) {
+          ({ error } = await supabase.from('user_access').upsert(candidateRow, { onConflict: 'user_id' }));
+          if (!error) break;
+          const missingCol = OPTIONAL_ACCESS_COLUMNS.find((col) => col in candidateRow && isMissingColumnError(error, col));
+          if (!missingCol) throw error;
+          const { [missingCol]: _omit, ...rest } = candidateRow;
+          candidateRow = rest;
         }
-        if (error) throw error;
 
         // Logging ist ein reiner Nebeneffekt (siehe logAdminAction - wirft nie)
         // und darf die eigentliche, bereits erfolgreiche Aenderung nicht mehr
         // beeinflussen. E-Mail nur bei Bedarf nachladen, nicht bei jedem
         // setAccess-Aufruf.
-        if (oldIsBlocked !== newIsBlocked || oldTrialEndsAt !== newTrialEndsAt || oldPlan !== newPlan) {
+        if (
+          oldIsBlocked !== newIsBlocked ||
+          oldTrialEndsAt !== newTrialEndsAt ||
+          oldPlan !== newPlan ||
+          oldPaidOutsideStripe !== newPaidOutsideStripe
+        ) {
           const { data: userData } = await supabase.auth.admin.getUserById(body.userId);
           const email = userData.user?.email ?? null;
           if (oldIsBlocked !== newIsBlocked) {
@@ -381,6 +417,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
           if (oldPlan !== newPlan) {
             await logAdminAction(supabase, 'plan_changed', `${oldPlan} -> ${newPlan}`, body.userId);
+          }
+          if (oldPaidOutsideStripe !== newPaidOutsideStripe) {
+            await logAdminAction(
+              supabase,
+              newPaidOutsideStripe ? 'paid_outside_stripe_confirmed' : 'paid_outside_stripe_unset',
+              email,
+              body.userId,
+            );
           }
         }
 

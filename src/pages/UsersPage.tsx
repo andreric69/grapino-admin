@@ -17,6 +17,7 @@ interface AdminUser {
   lastPayment: { reason: string; status: string; createdAt: string } | null;
   plan: PlanTier;
   stripeSubscriptionId: string | null;
+  paidOutsideStripe: boolean;
 }
 
 type PlanTier = 'basis' | 'pro' | 'ultra';
@@ -34,16 +35,18 @@ const PLAN_STYLES: Record<PlanTier, { background: string; color: string }> = {
 };
 
 // Die farbige Premium-Optik (gold/bordeaux) ist bewusst NUR fuer eine Stufe
-// reserviert, die tatsaechlich durch ein aktives Stripe-Abo gedeckt ist - alles
-// andere (manuell vergeben, oder ein Bestandskonto von vor der Abo-Einfuehrung,
-// das nie ein Abo hatte) bekommt dieselbe neutral-graue Optik wie "Basis" plus
-// einen erklaerenden Zusatz IM Badge selbst statt einer leicht zu uebersehenden
-// Randnotiz. Vorher stand z. B. bei Thomas ein knalliges "Ultra"-Abzeichen, das
-// wie ein zahlender Premium-Kunde aussah, obwohl er nie ein Abo abgeschlossen
-// hat - auf den ersten Blick nicht von einem echten Ultra-Abonnenten zu
+// reserviert, die tatsaechlich bezahlt wurde - per Stripe ODER manuell von
+// Andrin als "ausserhalb Stripe bezahlt" bestaetigt (bar/TWINT, siehe
+// UserDetailPanel.tsx) - alles andere (manuell OHNE Bestaetigung vergeben,
+// oder ein Bestandskonto von vor der Abo-Einfuehrung, das nie bezahlt hat)
+// bekommt dieselbe neutral-graue Optik wie "Basis" plus einen erklaerenden
+// Zusatz IM Badge selbst statt einer leicht zu uebersehenden Randnotiz.
+// Vorher stand z. B. bei Thomas ein knalliges "Ultra"-Abzeichen, das wie ein
+// zahlender Premium-Kunde aussah, obwohl fuer ihn nie ein Abo/eine Zahlung
+// hinterlegt war - auf den ersten Blick nicht von einem echten Abonnenten zu
 // unterscheiden.
-function planBadge(u: Pick<AdminUser, 'plan' | 'stripeSubscriptionId'>): { label: string; background: string; color: string } {
-  if (u.plan === 'basis' || u.stripeSubscriptionId) {
+function planBadge(u: Pick<AdminUser, 'plan' | 'stripeSubscriptionId' | 'paidOutsideStripe'>): { label: string; background: string; color: string } {
+  if (u.plan === 'basis' || u.stripeSubscriptionId || u.paidOutsideStripe) {
     return { label: PLAN_LABELS[u.plan], ...PLAN_STYLES[u.plan] };
   }
   return { label: `${PLAN_LABELS[u.plan]} · kein Abo`, ...PLAN_STYLES.basis };
@@ -364,7 +367,7 @@ export function UsersPage() {
   const filteredUsers = users.filter((u) => {
     if (query && !(u.email ?? '').toLowerCase().includes(query) && !(u.displayName ?? '').toLowerCase().includes(query)) return false;
     if (planFilter !== 'all' && u.plan !== planFilter) return false;
-    if (unpaidOnly && (u.plan === 'basis' || u.stripeSubscriptionId)) return false;
+    if (unpaidOnly && (u.plan === 'basis' || u.stripeSubscriptionId || u.paidOutsideStripe)) return false;
     if (blockedOnly && !u.isBlocked) return false;
     return true;
   });
@@ -423,7 +426,7 @@ export function UsersPage() {
           ))}
           <span style={{ width: 1, alignSelf: 'stretch', background: colors.border, margin: '0 4px' }} />
           <button type="button" onClick={() => setUnpaidOnly((v) => !v)} style={chipStyle(unpaidOnly)}>
-            Kein Stripe-Abo
+            Kein Abo
           </button>
           <button type="button" onClick={() => setBlockedOnly((v) => !v)} style={chipStyle(blockedOnly)}>
             Blockiert
@@ -515,7 +518,7 @@ export function UsersPage() {
                     {u.email ?? u.id}
                     {(() => {
                       const badge = planBadge(u);
-                      const isUnpaid = u.plan !== 'basis' && !u.stripeSubscriptionId;
+                      const isUnpaid = u.plan !== 'basis' && !u.stripeSubscriptionId && !u.paidOutsideStripe;
                       return (
                         <span
                           title={

@@ -21,6 +21,7 @@ interface UserDetail {
     stripeCustomerId: string | null;
     stripeSubscriptionId: string | null;
     plan: PlanTier;
+    paidOutsideStripe: boolean;
   };
   wineStats: { total: number; active: number; totalValue: number; withPrice: number };
   wines: { id: string; name: string | null; created_at: string; price: number | null; is_consumed: boolean }[];
@@ -150,6 +151,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
   const [extendDays, setExtendDays] = useState('7');
   const [aiDailyLimit, setAiDailyLimit] = useState('');
   const [plan, setPlan] = useState<PlanTier>('ultra');
+  const [paidOutsideStripe, setPaidOutsideStripe] = useState(false);
   const [savingAccess, setSavingAccess] = useState(false);
 
   const [loginLink, setLoginLink] = useState<string | null>(null);
@@ -172,6 +174,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     setTrialEndsAt(data.access.trialEndsAt ?? '');
     setAiDailyLimit(data.access.aiDailyLimit !== null ? String(data.access.aiDailyLimit) : '');
     setPlan(data.access.plan ?? 'ultra');
+    setPaidOutsideStripe(data.access.paidOutsideStripe ?? false);
   }
 
   useEffect(() => {
@@ -179,7 +182,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  async function saveAccess(isBlocked: boolean, planOverride?: PlanTier) {
+  async function saveAccess(isBlocked: boolean, planOverride?: PlanTier, paidOutsideStripeOverride?: boolean) {
     setSavingAccess(true);
     setError(null);
     try {
@@ -195,6 +198,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           trialEndsAt: trialEndsAt || null,
           aiDailyLimit: aiDailyLimit.trim() ? parseInt(aiDailyLimit, 10) : null,
           plan: planOverride ?? plan,
+          paidOutsideStripe: paidOutsideStripeOverride ?? paidOutsideStripe,
         }),
       });
       if (!res.ok) throw new Error();
@@ -437,9 +441,26 @@ export function UserDetailPanel({ userId }: { userId: string }) {
             </button>
           ))}
         </div>
-        {plan !== 'basis' && !detail.access.stripeSubscriptionId && (
+        {plan !== 'basis' && !detail.access.stripeSubscriptionId && !paidOutsideStripe && (
           <div style={{ fontSize: 11, opacity: 0.55, marginTop: 6 }}>
             Kein aktives Stripe-Abo hinter dieser Stufe - manuell vergeben oder nie bezahlt (siehe "Stripe-Abo" unten).
+          </div>
+        )}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, marginTop: 10 }}>
+          <input
+            type="checkbox"
+            checked={paidOutsideStripe}
+            disabled={savingAccess}
+            onChange={(e) => {
+              setPaidOutsideStripe(e.target.checked);
+              saveAccess(detail.access.isBlocked, undefined, e.target.checked);
+            }}
+          />
+          Ausserhalb Stripe bezahlt (bar/TWINT)
+        </label>
+        {paidOutsideStripe && (
+          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 4 }}>
+            Zaehlt wie ein echtes Stripe-Abo - Betrag/Datum bitte als Admin-Notiz unten festhalten.
           </div>
         )}
       </div>
