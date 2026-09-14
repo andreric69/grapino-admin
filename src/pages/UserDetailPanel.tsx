@@ -55,6 +55,8 @@ const STRIPE_BLOCK_REASONS = new Set([
   'Die letzte Zahlung ist fehlgeschlagen - bitte Zahlungsmethode pruefen.',
 ]);
 
+const fieldLabelStyle = { display: 'block', fontSize: 11, opacity: 0.6, marginBottom: 3 } as const;
+
 function formatDateTime(iso: string | null): string {
   if (!iso) return '-';
   return new Date(iso).toLocaleString('de-CH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -182,24 +184,20 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  async function saveAccess(isBlocked: boolean, planOverride?: PlanTier, paidOutsideStripeOverride?: boolean) {
+  // Schickt NUR die uebergebenen Felder (dank der Teil-Aktualisierung in
+  // api/users.ts) - jede Karte unten speichert dadurch ausschliesslich ihre
+  // eigenen Felder, ohne die Werte der anderen Karten anzufassen. Vorher
+  // schickte jeder Aufruf immer ALLE Felder auf einmal mit, was Block-Grund/
+  // -Betrag, Testphase und KI-Limit optisch und funktional zu einem einzigen,
+  // unuebersichtlichen Block verklebte.
+  async function saveAccess(fields: Record<string, unknown>) {
     setSavingAccess(true);
     setError(null);
     try {
       const res = await apiFetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'setAccess',
-          userId,
-          isBlocked,
-          blockReason: blockReason.trim() || null,
-          blockAmount: blockAmount.trim() ? parseFloat(blockAmount.replace(',', '.')) : null,
-          trialEndsAt: trialEndsAt || null,
-          aiDailyLimit: aiDailyLimit.trim() ? parseInt(aiDailyLimit, 10) : null,
-          plan: planOverride ?? plan,
-          paidOutsideStripe: paidOutsideStripeOverride ?? paidOutsideStripe,
-        }),
+        body: JSON.stringify({ action: 'setAccess', userId, ...fields }),
       });
       if (!res.ok) throw new Error();
       await load();
@@ -210,11 +208,32 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     }
   }
 
+  function blockUser() {
+    saveAccess({
+      isBlocked: true,
+      blockReason: blockReason.trim() || null,
+      blockAmount: blockAmount.trim() ? parseFloat(blockAmount.replace(',', '.')) : null,
+    });
+  }
+
+  function unblockUser() {
+    saveAccess({ isBlocked: false });
+  }
+
+  function saveTrialEndsAt() {
+    saveAccess({ trialEndsAt: trialEndsAt || null });
+  }
+
+  function saveAiDailyLimit() {
+    saveAccess({ aiDailyLimit: aiDailyLimit.trim() ? parseInt(aiDailyLimit, 10) : null });
+  }
+
   // Verlaengert ab dem SPAETEREN von "heute" und dem aktuell gesetzten Datum -
   // ein bereits abgelaufenes Testabo wird also ab heute neu gerechnet (nicht
   // von einem Datum in der Vergangenheit aus), ein noch laufendes einfach um
-  // die angegebene Tageszahl verlaengert. Setzt nur das Formularfeld - wie
-  // die anderen Felder hier erst mit "Einstellungen speichern" wirksam.
+  // die angegebene Tageszahl verlaengert. Speichert sofort (ein Klick genuegt) -
+  // das neue Datum wird direkt mitgegeben statt aus dem State gelesen, da
+  // setState() erst beim naechsten Render sichtbar waere.
   function extendTrial() {
     const days = parseInt(extendDays, 10);
     if (!days || days <= 0) return;
@@ -222,7 +241,9 @@ export function UserDetailPanel({ userId }: { userId: string }) {
     const current = trialEndsAt ? new Date(`${trialEndsAt}T00:00:00`) : null;
     const base = current && current.getTime() > today.getTime() ? current : today;
     base.setDate(base.getDate() + days);
-    setTrialEndsAt(base.toISOString().slice(0, 10));
+    const newDate = base.toISOString().slice(0, 10);
+    setTrialEndsAt(newDate);
+    saveAccess({ trialEndsAt: newDate });
   }
 
   async function generateLoginLink() {
@@ -328,7 +349,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         <>
       <div style={{ ...cardStyle, background: detail.access.isBlocked ? 'rgba(179, 38, 30, 0.06)' : colors.surface }}>
         <div style={{ fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-          Zugang
+          Zugangsstatus
           <span
             style={{
               fontSize: 11,
@@ -341,94 +362,99 @@ export function UserDetailPanel({ userId }: { userId: string }) {
             {detail.access.isBlocked ? 'Blockiert' : 'Frei'}
           </span>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-          <input
-            value={blockReason}
-            onChange={(e) => setBlockReason(e.target.value)}
-            placeholder="Grund (z. B. Missbrauch)"
-            style={inputStyle}
-          />
-          <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+          <div>
+            <label style={fieldLabelStyle}>Grund (nur bei Blockieren sichtbar/noetig)</label>
+            <input
+              value={blockReason}
+              onChange={(e) => setBlockReason(e.target.value)}
+              placeholder="z. B. Missbrauch"
+              style={{ ...inputStyle, width: '100%' }}
+            />
+          </div>
+          <div>
+            <label style={fieldLabelStyle}>Betrag (optional, nur informativ)</label>
             <input
               value={blockAmount}
               onChange={(e) => setBlockAmount(e.target.value)}
-              placeholder="Betrag CHF"
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <input
-              type="date"
-              value={trialEndsAt}
-              onChange={(e) => setTrialEndsAt(e.target.value)}
-              title="Testabo-Ende (zeigt dem Nutzer beim Login einen Hinweis, blockiert nichts automatisch)"
-              style={{ ...inputStyle, flex: 1 }}
+              placeholder="CHF"
+              style={{ ...inputStyle, width: '100%' }}
             />
           </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input
-              type="number"
-              min={1}
-              value={extendDays}
-              onChange={(e) => setExtendDays(e.target.value)}
-              style={{ ...inputStyle, width: 64 }}
-            />
-            <button
-              type="button"
-              onClick={extendTrial}
-              title="Zaehlt die Tage zum aktuellen Testabo-Datum dazu (oder ab heute, falls abgelaufen/leer) - danach unten speichern"
-              style={{ ...secondaryBtnStyle, whiteSpace: 'nowrap', padding: '6px 10px', fontSize: 12.5 }}
-            >
-              Tage verlängern
-            </button>
-          </div>
-          <input
-            type="number"
-            min={0}
-            value={aiDailyLimit}
-            onChange={(e) => setAiDailyLimit(e.target.value)}
-            placeholder="KI-Tageslimit (leer = Standard 100)"
-            style={{ ...inputStyle, width: '100%' }}
-          />
-          <div style={{ fontSize: 11, opacity: 0.55 }}>
-            KI-Tageslimit: 0 deaktiviert die Etikett-Erkennung für diesen Nutzer komplett.
-            {detail.access.blockReason && STRIPE_BLOCK_REASONS.has(detail.access.blockReason) && (
-              <>
-                {' '}
-                <strong>Dieser Block wurde automatisch von Stripe gesetzt</strong> (Zahlungsproblem) - beim
-                Freischalten wird der Zugang erst wieder gesperrt, wenn Stripe erneut ein Problem meldet.
-              </>
-            )}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {detail.access.isBlocked ? (
-            <button type="button" disabled={savingAccess} onClick={() => saveAccess(false)} style={secondaryBtnStyle}>
-              Freischalten
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={savingAccess || !blockReason.trim()}
-              onClick={() => saveAccess(true)}
-              style={{ ...secondaryBtnStyle, background: colors.danger, color: '#fff', border: 'none' }}
-            >
-              Blockieren
-            </button>
+          {detail.access.blockReason && STRIPE_BLOCK_REASONS.has(detail.access.blockReason) && (
+            <div style={{ fontSize: 11, opacity: 0.7 }}>
+              <strong>Dieser Block wurde automatisch von Stripe gesetzt</strong> (Zahlungsproblem) - beim
+              Freischalten wird der Zugang erst wieder gesperrt, wenn Stripe erneut ein Problem meldet.
+            </div>
           )}
-          <button type="button" disabled={savingAccess} onClick={() => saveAccess(detail.access.isBlocked)} style={secondaryBtnStyle}>
-            Einstellungen speichern
+        </div>
+        {detail.access.isBlocked ? (
+          <button type="button" disabled={savingAccess} onClick={unblockUser} style={secondaryBtnStyle}>
+            Entsperren
           </button>
+        ) : (
+          <button
+            type="button"
+            disabled={savingAccess || !blockReason.trim()}
+            onClick={blockUser}
+            style={{ ...secondaryBtnStyle, background: colors.danger, color: '#fff', border: 'none' }}
+          >
+            Blockieren
+          </button>
+        )}
+      </div>
+
+      <div style={cardStyle}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Testphase</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div>
+            <label style={fieldLabelStyle}>Endet am (zeigt dem Nutzer beim Login einen Hinweis, sperrt nichts automatisch)</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="date"
+                value={trialEndsAt}
+                onChange={(e) => setTrialEndsAt(e.target.value)}
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button type="button" disabled={savingAccess} onClick={saveTrialEndsAt} style={secondaryBtnStyle}>
+                Speichern
+              </button>
+            </div>
+          </div>
+          <div>
+            <label style={fieldLabelStyle}>Schnell verlängern, ab heute oder ab dem aktuellen Datum (je nachdem was später ist)</label>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="number"
+                min={1}
+                value={extendDays}
+                onChange={(e) => setExtendDays(e.target.value)}
+                style={{ ...inputStyle, width: 64 }}
+              />
+              <span style={{ fontSize: 12.5, opacity: 0.7 }}>Tage</span>
+              <button
+                type="button"
+                disabled={savingAccess}
+                onClick={extendTrial}
+                style={{ ...secondaryBtnStyle, whiteSpace: 'nowrap', padding: '6px 10px', fontSize: 12.5 }}
+              >
+                Verlängern &amp; speichern
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       <div style={cardStyle}>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Abo-Stufe</div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Abo &amp; Zahlung</div>
+        <label style={fieldLabelStyle}>Abo-Stufe</label>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           {(['basis', 'pro', 'ultra'] as const).map((p) => (
             <button
               key={p}
               type="button"
               disabled={savingAccess}
-              onClick={() => saveAccess(detail.access.isBlocked, p)}
+              onClick={() => saveAccess({ plan: p })}
               style={{
                 ...secondaryBtnStyle,
                 flex: 1,
@@ -441,56 +467,73 @@ export function UserDetailPanel({ userId }: { userId: string }) {
             </button>
           ))}
         </div>
-        {plan !== 'basis' && !detail.access.stripeSubscriptionId && !paidOutsideStripe && (
-          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 6 }}>
-            Kein aktives Stripe-Abo hinter dieser Stufe - manuell vergeben oder nie bezahlt (siehe "Stripe-Abo" unten).
-          </div>
-        )}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, marginTop: 10 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
           <input
             type="checkbox"
             checked={paidOutsideStripe}
             disabled={savingAccess}
             onChange={(e) => {
               setPaidOutsideStripe(e.target.checked);
-              saveAccess(detail.access.isBlocked, undefined, e.target.checked);
+              saveAccess({ paidOutsideStripe: e.target.checked });
             }}
           />
           Ausserhalb Stripe bezahlt (bar/TWINT)
         </label>
+        {plan !== 'basis' && !detail.access.stripeSubscriptionId && !paidOutsideStripe && (
+          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 6 }}>
+            Kein aktives Stripe-Abo hinter dieser Stufe - manuell vergeben oder nie bezahlt.
+          </div>
+        )}
         {paidOutsideStripe && (
-          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 4 }}>
+          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 6 }}>
             Zaehlt wie ein echtes Stripe-Abo - Betrag/Datum bitte als Admin-Notiz unten festhalten.
           </div>
         )}
+
+        <div style={{ borderTop: `1px solid ${colors.border}`, marginTop: 12, paddingTop: 10 }}>
+          <label style={fieldLabelStyle}>Stripe</label>
+          {detail.access.stripeCustomerId ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5 }}>
+              <div>
+                Kunde:{' '}
+                <a
+                  href={`https://dashboard.stripe.com/test/customers/${detail.access.stripeCustomerId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: colors.accent }}
+                >
+                  {detail.access.stripeCustomerId}
+                </a>
+              </div>
+              <div style={{ opacity: 0.75 }}>
+                {detail.access.stripeSubscriptionId ? `Abo: ${detail.access.stripeSubscriptionId}` : 'Kein aktives Abo (Checkout begonnen, aber nicht abgeschlossen, oder gekündigt).'}
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.55 }}>
+                Details, Kündigung oder Rückerstattung direkt im Stripe-Dashboard. Link geht aktuell zum Test-Modus -
+                nach dem Wechsel auf Live-Zahlungen hier den Pfad "/test/" entfernen.
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12.5, opacity: 0.55 }}>Noch kein Stripe-Kunde (kein Checkout begonnen).</div>
+          )}
+        </div>
       </div>
 
       <div style={cardStyle}>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Stripe-Abo</div>
-        {detail.access.stripeCustomerId ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5 }}>
-            <div>
-              Kunde:{' '}
-              <a
-                href={`https://dashboard.stripe.com/test/customers/${detail.access.stripeCustomerId}`}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: colors.accent }}
-              >
-                {detail.access.stripeCustomerId}
-              </a>
-            </div>
-            <div style={{ opacity: 0.75 }}>
-              {detail.access.stripeSubscriptionId ? `Abo: ${detail.access.stripeSubscriptionId}` : 'Kein aktives Abo (Checkout begonnen, aber nicht abgeschlossen, oder gekündigt).'}
-            </div>
-            <div style={{ fontSize: 11, opacity: 0.55 }}>
-              Details, Kündigung oder Rückerstattung direkt im Stripe-Dashboard. Link geht aktuell zum Test-Modus -
-              nach dem Wechsel auf Live-Zahlungen hier den Pfad "/test/" entfernen.
-            </div>
-          </div>
-        ) : (
-          <div style={{ fontSize: 12.5, opacity: 0.55 }}>Noch kein Stripe-Kunde (kein Checkout begonnen).</div>
-        )}
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>KI-Etikett-Erkennung</div>
+        <label style={fieldLabelStyle}>Tageslimit (leer = Standard 100, 0 = für diesen Nutzer deaktiviert)</label>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input
+            type="number"
+            min={0}
+            value={aiDailyLimit}
+            onChange={(e) => setAiDailyLimit(e.target.value)}
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button type="button" disabled={savingAccess} onClick={saveAiDailyLimit} style={secondaryBtnStyle}>
+            Speichern
+          </button>
+        </div>
       </div>
 
       <div style={cardStyle}>
