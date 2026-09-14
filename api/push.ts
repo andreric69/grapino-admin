@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from './_types.js';
 import { isAuthorized, safeEqualStrings } from './_auth.js';
 import { getSupabaseAdmin, listAllUsers } from './_supabaseAdmin.js';
 import { sendPush } from './_push.js';
-import { errorMessage } from './_health.js';
+import { errorMessage, notifyErrorIfDue } from './_health.js';
 
 const CATEGORY_LABELS: Record<string, string> = {
   allgemein: 'Allgemein',
@@ -56,6 +56,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body: `${who}${categoryLabel ? ' - ' + categoryLabel : ''}: ${message ?? ''}`.trim(),
         url: '/',
       });
+      res.status(200).json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: errorMessage(e) });
+    }
+    return;
+  }
+
+  // Wird von der Haupt-Weinapp aufgerufen (siehe
+  // claude weinapp/api/_errorLog.ts), nicht von einem Postgres-Trigger - die
+  // Weinapp hat bewusst kein eigenes VAPID-Schluesselpaar/web-push-Abhaengigkeit
+  // (Zero-Cost/schlanke Architektur, siehe NOTFALL/README.md), sondern
+  // schreibt den admin_error_log-Eintrag selbst direkt per service_role
+  // (gleiches Supabase-Projekt) und ruft hier nur noch die eigentliche
+  // Push-Zustellung ab - gleiches geteiltes Secret wie beim
+  // notify-message-Pfad oben, gleiche Drossel-Logik wie fuer Admin-App-eigene
+  // Fehler (siehe notifyErrorIfDue in _health.ts).
+  if (resource === 'notify-error') {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+    const secret = process.env.PUSH_WEBHOOK_SECRET;
+    const provided = req.headers['x-push-webhook-secret'];
+    if (!secret || typeof provided !== 'string' || !safeEqualStrings(provided, secret)) {
+      res.status(401).json({ error: 'Nicht autorisiert.' });
+      return;
+    }
+    const { id, endpoint, message } = (req.body ?? {}) as { id?: string; endpoint?: string; message?: string };
+    if (!id || !endpoint || !message) {
+      res.status(400).json({ error: 'id, endpoint, message erforderlich.' });
+      return;
+    }
+    try {
+      const supabase = getSupabaseAdmin();
+      await notifyErrorIfDue(supabase, id, endpoint, message);
       res.status(200).json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: errorMessage(e) });

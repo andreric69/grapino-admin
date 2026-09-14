@@ -29,14 +29,17 @@ export function errorMessage(e: unknown): string {
 }
 
 /**
- * Schreibt einen Fehler in admin_error_log und loest (gedrosselt) eine Push-
- * Benachrichtigung aus. Wirft nie - ein fehlgeschlagenes Logging darf den
- * eigentlich fehlgeschlagenen Request nicht zusaetzlich crashen.
+ * Prueft die Push-Drossel (siehe NOTIFY_COOLDOWN_MS) und schickt bei Bedarf
+ * die eigentliche Push-Benachrichtigung fuer einen BEREITS in admin_error_log
+ * eingetragenen Fehler. Ausgelagert aus logError(), damit dieselbe Drossel-
+ * Logik auch fuer Fehler gilt, die nicht hier inline entstehen, sondern von
+ * der Haupt-Weinapp ueber den Webhook-Pfad api/push.ts?resource=notify-error
+ * gemeldet werden (siehe dort und claude weinapp/api/_errorLog.ts) - beide
+ * schreiben in dieselbe admin_error_log-Tabelle im selben Supabase-Projekt,
+ * die notified_at-Spalte drosselt dadurch bereits von sich aus app-
+ * uebergreifend richtig (kein separater Zaehler pro App noetig). Wirft nie.
  */
-export async function logError(supabase: SupabaseClient, endpoint: string, e: unknown): Promise<void> {
-  const message = errorMessage(e);
-  const detail = e instanceof Error ? (e.stack ?? null) : e ? JSON.stringify(e) : null;
-
+export async function notifyErrorIfDue(supabase: SupabaseClient, id: string, endpoint: string, message: string): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - NOTIFY_COOLDOWN_MS).toISOString();
     const { data: recentNotified } = await supabase
@@ -46,16 +49,33 @@ export async function logError(supabase: SupabaseClient, endpoint: string, e: un
       .limit(1);
     const shouldNotify = !recentNotified || recentNotified.length === 0;
 
+    if (shouldNotify) {
+      await sendPush(supabase, 'admin', { tag: 'grapino-error', title: 'Grapino Admin - Fehler', body: `${endpoint}: ${message}`, url: '/' });
+      await supabase.from('admin_error_log').update({ notified_at: new Date().toISOString() }).eq('id', id);
+    }
+  } catch {
+    // Push ist ein Nebeneffekt - nie den urspruenglichen Fehler ueberdecken
+    // oder den aufrufenden Request zusaetzlich zum Absturz bringen.
+  }
+}
+
+/**
+ * Schreibt einen Fehler in admin_error_log und loest (gedrosselt) eine Push-
+ * Benachrichtigung aus. Wirft nie - ein fehlgeschlagenes Logging darf den
+ * eigentlich fehlgeschlagenen Request nicht zusaetzlich crashen.
+ */
+export async function logError(supabase: SupabaseClient, endpoint: string, e: unknown): Promise<void> {
+  const message = errorMessage(e);
+  const detail = e instanceof Error ? (e.stack ?? null) : e ? JSON.stringify(e) : null;
+
+  try {
     const { data: inserted } = await supabase
       .from('admin_error_log')
-      .insert({ endpoint, message, detail })
+      .insert({ endpoint, message, detail, source: 'admin' })
       .select('id')
       .single();
 
-    if (shouldNotify && inserted) {
-      await sendPush(supabase, 'admin', { tag: 'grapino-error', title: 'Grapino Admin - Fehler', body: `${endpoint}: ${message}`, url: '/' });
-      await supabase.from('admin_error_log').update({ notified_at: new Date().toISOString() }).eq('id', inserted.id);
-    }
+    if (inserted) await notifyErrorIfDue(supabase, inserted.id, endpoint, message);
   } catch {
     // Logging/Push ist ein Nebeneffekt - nie den urspruenglichen Fehler
     // ueberdecken oder den Request zusaetzlich zum Absturz bringen.
