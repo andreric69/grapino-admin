@@ -88,7 +88,14 @@ function isMissingColumnError(e: unknown, column: string): boolean {
  * schon angewendet hat.
  */
 async function selectWithOptionalColumns<T>(
-  runQuery: (columns: string) => Promise<{ data: T; error: unknown }>,
+  // PromiseLike statt Promise: Supabases Query-Builder (PostgrestFilterBuilder/
+  // PostgrestBuilder) ist zur Laufzeit "thenable"/awaitbar, erfuellt aber
+  // strukturell nicht die volle Promise-Schnittstelle (fehlt z. B. .catch) -
+  // mit "Promise<...>" als Parametertyp meldete tsc das faelschlich als
+  // Fehler, obwohl das Verhalten laengst korrekt ist (live mehrfach
+  // verifiziert). Vorbestehender Fehler, unabhaengig von aktuellen
+  // Aenderungen - hier bei Gelegenheit behoben.
+  runQuery: (columns: string) => PromiseLike<{ data: T; error: unknown }>,
   baseColumns: string,
 ): Promise<T> {
   let optional: string[] = [...OPTIONAL_ACCESS_COLUMNS];
@@ -104,19 +111,25 @@ async function selectWithOptionalColumns<T>(
 
 /** Laedt user_access fuer ALLE Nutzer, mit Fallback ohne noch fehlende optionale Spalten. */
 async function fetchAllUserAccess(supabase: SupabaseClient): Promise<Map<string, UserAccessFields>> {
-  const data = await selectWithOptionalColumns(
-    (columns) => supabase.from('user_access').select(`user_id, ${columns}`),
+  // Explizites Typ-Argument + Cast: Supabases Typ-Parser kann die per Template-
+  // String dynamisch gebaute Spaltenliste nicht literal auswerten (das ist so
+  // gewollt, siehe selectWithOptionalColumns) und leitet dadurch einen
+  // ParserError-Typ statt der echten Zeilenform her - zur Laufzeit liefert
+  // Supabase trotzdem ganz normale Objekte.
+  const data = await selectWithOptionalColumns<Record<string, unknown>[]>(
+    (columns) => supabase.from('user_access').select(`user_id, ${columns}`) as unknown as PromiseLike<{ data: Record<string, unknown>[]; error: unknown }>,
     BASE_ACCESS_COLUMNS,
   );
-  return new Map((data ?? []).map((a: Record<string, unknown>) => [a.user_id as string, a as UserAccessFields]));
+  return new Map((data ?? []).map((a) => [a.user_id as string, a as unknown as UserAccessFields]));
 }
 
 /** Laedt user_access fuer EINEN Nutzer, mit demselben Fallback wie fetchAllUserAccess(). */
 async function fetchUserAccess(supabase: SupabaseClient, userId: string): Promise<UserAccessFields | null> {
-  return selectWithOptionalColumns(
-    (columns) => supabase.from('user_access').select(columns).eq('user_id', userId).maybeSingle(),
+  return selectWithOptionalColumns<UserAccessFields | null>(
+    (columns) =>
+      supabase.from('user_access').select(columns).eq('user_id', userId).maybeSingle() as unknown as PromiseLike<{ data: UserAccessFields | null; error: unknown }>,
     BASE_ACCESS_COLUMNS,
-  ) as Promise<UserAccessFields | null>;
+  );
 }
 
 async function listUsersWithWineCounts(supabase: SupabaseClient): Promise<AdminUserRow[]> {
